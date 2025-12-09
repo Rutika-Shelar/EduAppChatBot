@@ -27,7 +27,7 @@ class ChatViewModel(
     apiBaseUrl: String,
     geminiApiKey: String = "",
     geminiUserClass: String = "6",
-    geminiNodeNumber: String = "8",
+    geminiNodeNumber: String = "8",//change this
     geminiMaxWord: String = "250"
 ) : ViewModel() {
 

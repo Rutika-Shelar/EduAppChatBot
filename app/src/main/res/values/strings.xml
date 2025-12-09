@@ -104,4 +104,6 @@
     <string name="resume_or_start_fresh">You have a previous session for this topic. Would you like to continue where you left off or start new?</string>
     <string name="continue_session">Continue</string>
     <string name="start_new">Start New</string>
+    <string name="logout">Logout</string>
+    <string name="logout_confirmation">Are you sure you want to logout?</string>
 </resources>

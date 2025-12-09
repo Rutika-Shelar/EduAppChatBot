@@ -1,6 +1,7 @@
 package com.example.eduappchatbot.ui.screens.home
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.webkit.WebView
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -14,12 +15,14 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material3.*
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,7 +44,8 @@ import com.example.eduappchatbot.utils.LanguageChangeHelper
 import com.example.eduappchatbot.viewModels.speechModels.SpeechToText
 import com.example.eduappchatbot.viewModels.speechModels.TextToSpeech
 import kotlinx.coroutines.delay
-
+@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatBotScreen(
     chatViewModel: ChatViewModel,
@@ -102,6 +106,7 @@ fun ChatBotScreen(
 
     var showSessionResumeDialog by remember { mutableStateOf(false) }
     var pendingConceptSelection by remember { mutableStateOf<String?>(null) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
 
     val availableConcepts by chatViewModel.availableConcepts.collectAsState()
     val selectedConcept by chatViewModel.selectedConcept.collectAsState()
@@ -243,35 +248,205 @@ fun ChatBotScreen(
             chatViewModel.stopNetworkObservation()
         }
     }
+    Scaffold(
+        topBar = { TopAppBar(
+            title = {
+                Text(stringResource(R.string.ai_tutor_name))
+            },
+            navigationIcon = {
+                Box{
+                    IconButton(onClick = {showSettingsMenu=true}) {
+                        Icon(
+                            imageVector = Icons.Default.Menu,
+                            contentDescription = "Menu",
+                            tint = IconPrimary
+                        )
+                    }
 
-    Surface(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(White)
-    ) {
+                    //Dropdown Menu
+                    DropdownMenu(
+                        expanded = showSettingsMenu,
+                        onDismissRequest = { showSettingsMenu = false },
+                        modifier = Modifier
+                            .background(White)
+                            .border(1.dp, BrandPrimary, RoundedCornerShape(0.dp))
+                    )
+                    {
+                        Column(
+                            modifier = Modifier
+                                .padding(12.dp)
+                                .widthIn(min = 220.dp, max = 320.dp)
+                        ) {
+                            Text(
+                                stringResource(R.string.settings),
+                                color = Black,
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            DropDownMenuModel(
+                                label = stringResource(R.string.select_language),
+                                options = listOf(
+                                    englishDisplayName,
+                                    kannadaDisplayName
+                                ),
+                                selectedValue = when (selectedLanguage) {
+                                    "en" -> englishDisplayName
+                                    "kn" -> kannadaDisplayName
+                                    else -> englishDisplayName
+                                },
+                                onValueSelected = { displayName ->
+                                    val shortCode = when (displayName) {
+                                        englishDisplayName -> "en"
+                                        kannadaDisplayName -> "kn"
+                                        else -> "en"
+                                    }
+
+                                    val currentConcept = selectedConcept
+                                    if (currentConcept != null) {
+                                        val originalConcept =
+                                            chatViewModel.getOriginalConceptName(
+                                                context,
+                                                currentConcept,
+                                                selectedLanguage
+                                            )
+                                        userRepository.savePreferredConcept(
+                                            originalConcept
+                                        )
+                                    }
+
+                                    chatViewModel.setCurrentLanguage(shortCode)
+                                    chatViewModel.refreshAvailableConcepts(
+                                        context,
+                                        shortCode
+                                    )
+
+                                    val fullTag = when (shortCode) {
+                                        "en" -> "en-IN"
+                                        "kn" -> "kn-IN"
+                                        else -> shortCode
+                                    }
+                                    LanguageChangeHelper.changeLanguage(
+                                        context,
+                                        fullTag
+                                    )
+                                    ttsController.applyDefaultsForAvatarLanguage(
+                                        selectedAvatar,
+                                        shortCode
+                                    )
+                                    ttsController.setLanguage(fullTag)
+                                    sttController.setLanguage(fullTag)
+                                    userRepository.updateLanguage(shortCode)
+                                }
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                stringResource(R.string.select_avatar),
+                                color = Black,
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            DropDownMenuModel(
+                                label = stringResource(R.string.avatar),
+                                options = listOf(boyDisplayName, girlDisplayName),
+                                selectedValue = when (selectedAvatar.lowercase()) {
+                                    "boy" -> boyDisplayName
+                                    "girl" -> girlDisplayName
+                                    else -> boyDisplayName
+                                },
+                                onValueSelected = { displayName ->
+                                    val avatarCode = when (displayName) {
+                                        boyDisplayName -> "boy"
+                                        girlDisplayName -> "girl"
+                                        else -> "boy"
+                                    }
+                                    selectedAvatar = avatarCode
+                                    ttsController.switchCharacter(avatarCode)
+                                    ttsController.applyDefaultsForAvatarLanguage(
+                                        avatarCode,
+                                        currentLanguage
+                                    )
+                                }
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                stringResource(R.string.select_voice),
+                                color = Black,
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            DropDownMenuModel(
+                                label = stringResource(R.string.voice),
+                                options = voiceOptions,
+                                selectedValue = displayedVoiceName,
+                                onValueSelected = { selectedDisplayName ->
+                                    val selectedVoice =
+                                        ttsState.availableVoices.find {
+                                            ttsController.formatVoiceName(it) == selectedDisplayName
+                                        }
+                                    selectedVoice?.let {
+                                        ttsController.setVoice(it)
+                                        if (ttsState.isSpeaking) {
+                                            ttsController.stop()
+                                            ttsController.speak(aiMessageOutput)
+                                        }
+                                    }
+                                }
+                            )
+
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                stringResource(R.string.select_speed),
+                                color = Black,
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            DropDownMenuModel(
+                                label = stringResource(R.string.speed),
+                                options = listOf("0.75x", "1.0x", "1.25x", "1.5x"),
+                                selectedValue = selectedSpeed,
+                                onValueSelected = { label ->
+                                    selectedSpeed = label
+                                    val speed = when (label) {
+                                        "0.75x" -> 0.75f
+                                        "1.0x" -> 1.0f
+                                        "1.25x" -> 1.25f
+                                        "1.5x" -> 1.5f
+                                        else -> 0.75f
+                                    }
+                                    ttsController.setSpeechRate(speed)
+                                    if (ttsState.isSpeaking) {
+                                        val currentText = aiMessageOutput
+                                        ttsController.stop()
+                                        ttsController.speak(currentText)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            },
+            actions = {
+                IconButton(onClick = {showLogoutDialog = true}) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Logout,
+                        contentDescription = "Logout",
+                        tint = IconPrimary
+                    )
+                }
+            },
+        )}
+    ) { innerPadding ->
         LazyColumn(
             state = mainScreenListState,
             modifier = Modifier
                 .fillMaxSize()
                 .background(White)
+                .padding(innerPadding)
                 .padding(horizontal = 10.dp, vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             contentPadding = PaddingValues(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // AI Tutor Name Header
-            item {
-                Column(
-                    horizontalAlignment = Alignment.Start,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = stringResource(R.string.ai_tutor_name),
-                        color = TextPrimary,
-                        style = MaterialTheme.typography.headlineMedium
-                    )
-                }
-            }
             // Chat Card
             item {
                 Card(
@@ -304,181 +479,6 @@ fun ChatBotScreen(
                                             ttsController.setupWebView(this)
                                         }
                                     })
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .wrapContentSize(Alignment.TopEnd)
-                                ) {
-                                    IconButton(
-                                        onClick = { showSettingsMenu = true }
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Settings,
-                                            contentDescription = "Settings",
-                                            tint = IconPrimary,
-                                            modifier = Modifier.size(32.dp)
-                                        )
-                                    }
-
-                                    DropdownMenu(
-                                        expanded = showSettingsMenu,
-                                        onDismissRequest = { showSettingsMenu = false },
-                                        modifier = Modifier
-                                            .background(White)
-                                            .border(1.dp, BrandPrimary, RoundedCornerShape(0.dp))
-                                    ) {
-                                        Column(
-                                            modifier = Modifier
-                                                .padding(12.dp)
-                                                .widthIn(min = 220.dp, max = 320.dp)
-                                        ) {
-                                            Text(
-                                                stringResource(R.string.settings),
-                                                color = Black,
-                                                style = MaterialTheme.typography.titleSmall
-                                            )
-                                            Spacer(Modifier.height(8.dp))
-                                            DropDownMenuModel(
-                                                label = stringResource(R.string.select_language),
-                                                options = listOf(
-                                                    englishDisplayName,
-                                                    kannadaDisplayName
-                                                ),
-                                                selectedValue = when (selectedLanguage) {
-                                                    "en" -> englishDisplayName
-                                                    "kn" -> kannadaDisplayName
-                                                    else -> englishDisplayName
-                                                },
-                                                onValueSelected = { displayName ->
-                                                    val shortCode = when (displayName) {
-                                                        englishDisplayName -> "en"
-                                                        kannadaDisplayName -> "kn"
-                                                        else -> "en"
-                                                    }
-
-                                                    val currentConcept = selectedConcept
-                                                    if (currentConcept != null) {
-                                                        val originalConcept =
-                                                            chatViewModel.getOriginalConceptName(
-                                                                context,
-                                                                currentConcept,
-                                                                selectedLanguage
-                                                            )
-                                                        userRepository.savePreferredConcept(
-                                                            originalConcept
-                                                        )
-                                                    }
-
-                                                    chatViewModel.setCurrentLanguage(shortCode)
-                                                    chatViewModel.refreshAvailableConcepts(
-                                                        context,
-                                                        shortCode
-                                                    )
-
-                                                    val fullTag = when (shortCode) {
-                                                        "en" -> "en-IN"
-                                                        "kn" -> "kn-IN"
-                                                        else -> shortCode
-                                                    }
-                                                    LanguageChangeHelper.changeLanguage(
-                                                        context,
-                                                        fullTag
-                                                    )
-                                                    ttsController.applyDefaultsForAvatarLanguage(
-                                                        selectedAvatar,
-                                                        shortCode
-                                                    )
-                                                    ttsController.setLanguage(fullTag)
-                                                    sttController.setLanguage(fullTag)
-                                                    userRepository.updateLanguage(shortCode)
-                                                }
-                                            )
-                                            Spacer(Modifier.height(12.dp))
-                                            Text(
-                                                stringResource(R.string.select_avatar),
-                                                color = Black,
-                                                style = MaterialTheme.typography.titleSmall
-                                            )
-                                            Spacer(Modifier.height(8.dp))
-                                            DropDownMenuModel(
-                                                label = stringResource(R.string.avatar),
-                                                options = listOf(boyDisplayName, girlDisplayName),
-                                                selectedValue = when (selectedAvatar.lowercase()) {
-                                                    "boy" -> boyDisplayName
-                                                    "girl" -> girlDisplayName
-                                                    else -> boyDisplayName
-                                                },
-                                                onValueSelected = { displayName ->
-                                                    val avatarCode = when (displayName) {
-                                                        boyDisplayName -> "boy"
-                                                        girlDisplayName -> "girl"
-                                                        else -> "boy"
-                                                    }
-                                                    selectedAvatar = avatarCode
-                                                    ttsController.switchCharacter(avatarCode)
-                                                    ttsController.applyDefaultsForAvatarLanguage(
-                                                        avatarCode,
-                                                        currentLanguage
-                                                    )
-                                                }
-                                            )
-                                            Spacer(Modifier.height(12.dp))
-                                            Text(
-                                                stringResource(R.string.select_voice),
-                                                color = Black,
-                                                style = MaterialTheme.typography.titleSmall
-                                            )
-                                            Spacer(Modifier.height(8.dp))
-                                            DropDownMenuModel(
-                                                label = stringResource(R.string.voice),
-                                                options = voiceOptions,
-                                                selectedValue = displayedVoiceName,
-                                                onValueSelected = { selectedDisplayName ->
-                                                    val selectedVoice =
-                                                        ttsState.availableVoices.find {
-                                                            ttsController.formatVoiceName(it) == selectedDisplayName
-                                                        }
-                                                    selectedVoice?.let {
-                                                        ttsController.setVoice(it)
-                                                        if (ttsState.isSpeaking) {
-                                                            ttsController.stop()
-                                                            ttsController.speak(aiMessageOutput)
-                                                        }
-                                                    }
-                                                }
-                                            )
-
-                                            Spacer(Modifier.height(12.dp))
-                                            Text(
-                                                stringResource(R.string.select_speed),
-                                                color = Black,
-                                                style = MaterialTheme.typography.titleSmall
-                                            )
-                                            Spacer(Modifier.height(8.dp))
-                                            DropDownMenuModel(
-                                                label = stringResource(R.string.speed),
-                                                options = listOf("0.75x", "1.0x", "1.25x", "1.5x"),
-                                                selectedValue = selectedSpeed,
-                                                onValueSelected = { label ->
-                                                    selectedSpeed = label
-                                                    val speed = when (label) {
-                                                        "0.75x" -> 0.75f
-                                                        "1.0x" -> 1.0f
-                                                        "1.25x" -> 1.25f
-                                                        "1.5x" -> 1.5f
-                                                        else -> 0.75f
-                                                    }
-                                                    ttsController.setSpeechRate(speed)
-                                                    if (ttsState.isSpeaking) {
-                                                        val currentText = aiMessageOutput
-                                                        ttsController.stop()
-                                                        ttsController.speak(currentText)
-                                                    }
-                                                }
-                                            )
-                                        }
-                                    }
                                 }
                             }
 
@@ -782,59 +782,48 @@ fun ChatBotScreen(
             }
         }
     }
+
     // Session Resume Dialog
-    if (showSessionResumeDialog && pendingConceptSelection != null) {
-        AlertDialog(
-            onDismissRequest = {
-                showSessionResumeDialog = false
-                pendingConceptSelection = null
-            },
-            title = {
-                Text(
-                    text = stringResource(R.string.existing_session_found),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = TextPrimary
-                )
-            }, text = {
-                Text(
-                    text = stringResource(R.string.resume_or_start_fresh),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        pendingConceptSelection?.let { concept ->
-                            chatViewModel.selectConcept(concept, context)
-                        }
-                        showSessionResumeDialog = false
-                        pendingConceptSelection = null
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = BrandPrimary
-                    )
-                ) {
-                    Text(stringResource(R.string.continue_session))
-                }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    onClick = {
-                        pendingConceptSelection?.let { concept ->
-                            chatViewModel.startFreshSession(concept, context)
-                        }
-                        showSessionResumeDialog = false
-                        pendingConceptSelection = null
-                    },
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = BrandPrimary
-                    )
-                ) {
-                    Text(stringResource(R.string.start_new))
-                }
-            },
-            containerColor = White
-        )
-    }
+    AppDialog(
+        show = showSessionResumeDialog && pendingConceptSelection != null,
+
+        title = stringResource(R.string.existing_session_found),
+
+        message = stringResource(R.string.resume_or_start_fresh),
+
+        confirmText = stringResource(R.string.continue_session),
+        dismissText = stringResource(R.string.start_new),
+
+        onConfirm = {
+            pendingConceptSelection?.let { concept ->
+                chatViewModel.selectConcept(concept, context)
+            }
+            showSessionResumeDialog = false
+            pendingConceptSelection = null
+        },
+
+        onDismiss = {
+            pendingConceptSelection?.let { concept ->
+                chatViewModel.startFreshSession(concept, context)
+            }
+            showSessionResumeDialog = false
+            pendingConceptSelection = null
+        }
+    )
+    // Logout Confirmation Dialog
+    AppDialog(
+        show = showLogoutDialog,
+        title = stringResource(R.string.logout),
+        message = stringResource(R.string.logout_confirmation),
+        confirmText = stringResource(R.string.logout),
+        onConfirm = {
+            showLogoutDialog = false
+            // logout actions
+        },
+        onDismiss = {
+            showLogoutDialog = false
+        }
+    )
+
+
 }

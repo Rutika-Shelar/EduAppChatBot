@@ -105,5 +105,6 @@
     <string name="resume_or_start_fresh">ಈ ವಿಷಯಕ್ಕೆ ಸಂಬಂಧಿಸಿದಂತೆ ನೀವು ಹಿಂದಿನ ಅವಧಿಯನ್ನು ಹೊಂದಿದ್ದೀರಿ. ನೀವು ನಿಲ್ಲಿಸಿದ ಸ್ಥಳದಿಂದ ಮುಂದುವರಿಸಲು ಅಥವಾ ಹೊಸದಾಗಿ ಪ್ರಾರಂಭಿಸಲು ಬಯಸುವಿರಾ?</string>
     <string name="continue_session">ಮುಂದುವರಿಸಿ</string>
     <string name="start_new">ಹೊಸದನ್ನು ಪ್ರಾರಂಭಿಸಿ</string>
-
+    <string name="logout">ನಿರ್ಗಮನ</string>
+    <string name="logout_confirmation">ನೀವು ನಿಜವಾಗಿಯೂ ನಿರ್ಗಮಿಸಲು ಬಯಸುತ್ತೀರಾ?</string>
 </resources>
