@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EduAppChatBot</string>
+
+    <!--    Language Selection Screen -->
+    <string name="select_your_language">ನಿಮ್ಮ ಭಾಷೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ</string>
+    <string name="language_icon_desc">ಭಾಷಾ ಚಿಹ್ನೆ</string>
+    <string name="language_subtitle">AI ಬೋಧನಾ ಅನುಭವಕ್ಕಾಗಿ ನಿಮ್ಮ ಆದ್ಯತೆಯ ಭಾಷೆಯನ್ನು ಆರಿಸಿ</string>
+    <string name="continue_">ಮುಂದುವರಿಸಿ</string>
+    <string name="lang_english">ಇಂಗ್ಲಿಷ್</string>
+    <string name="lang_kannada">ಕನ್ನಡ</string>
+    <string name="lang_hindi">ಹಿಂದಿ</string>
+    <string name="lang_telugu">ತೆಲುಗು</string>
+    <string name="tamil">ತಮಿಳು</string>
+
+    <!--    Google Sign up Screen-->
+    <string name="google_sign_in">Google ನೊಂದಿಗೆ ಮುಂದುವರಿಸಿ</string>
+    <string name="ai_tutor_platform">AI ಬೋಧಕ ವೇದಿಕೆ</string>
+    <string name="personilized_learning_message">1ನೇ ತರಗತಿಯಿಂದ 10ನೇ ತರಗತಿಯ ವಿದ್ಯಾರ್ಥಿಗಳಿಗೆ \n ವೈಯಕ್ತಿಕಗೊಳಿಸಿದ ಕಲಿಕೆ</string>
+    <string name="welcome_back">ಮರಳಿ ಸ್ವಾಗತ!</string>
+
+    <!--    User Detail Entry Screen-->
+    <string name="welcome_to_ai_tutor_message">AI ಬೋಧಕರಿಗೆ ಸ್ವಾಗತ!</string>
+    <string name="lets_go_to_know_you_message">ನಿಮ್ಮ ಕಲಿಕಾ ಅನುಭವವನ್ನು ವೈಯಕ್ತಿಕಗೊಳಿಸಲು ನಿಮ್ಮನ್ನು ಚೆನ್ನಾಗಿ ತಿಳಿದುಕೊಳ್ಳೋಣ</string>
+
+    <string name="full_name_label">ಪೂರ್ಣ ಹೆಸರು</string>
+    <string name="phone_number_label">ದೂರವಾಣಿ ಸಂಖ್ಯೆ</string>
+    <string name="your_ambition_label">ನಿಮ್ಮ ಮಹತ್ವಾಕಾಂಕ್ಷೆ</string>
+    <string name="school_name_label">ಶಾಲೆಯ ಹೆಸರು</string>
+
+    <string name="full_name_hint">ನಿಮ್ಮ ಪೂರ್ಣ ಹೆಸರನ್ನು ನಮೂದಿಸಿ</string>
+    <string name="phone_number_hint">ನಿಮ್ಮ ದೂರವಾಣಿ ಸಂಖ್ಯೆಯನ್ನು ನಮೂದಿಸಿ</string>
+    <string name="your_ambition_hint">ನೀವು ಏನಾಗಲು ಬಯಸುತ್ತೀರಿ</string>
+    <string name="school_name_hint">ನಿಮ್ಮ ಶಾಲೆಯ ಹೆಸರನ್ನು ನಮೂದಿಸಿ</string>
+    <string name="get_started">ಪ್ರಾರಂಭಿಸಿ</string>
+
+    <!--    Study Session Setup Screen-->
+    <string name="select_class">ತರಗತಿ ಆಯ್ಕೆಮಾಡಿ</string>
+    <string name="select_syllabus">ಪಠ್ಯಕ್ರಮ ಆಯ್ಕೆಮಾಡಿ</string>
+    <string name="select_subject">ವಿಷಯ ಆಯ್ಕೆಮಾಡಿ</string>
+
+    <string name="select_chapter_to_study">ಅಧ್ಯಯನ ಮಾಡಲು ಅಧ್ಯಾಯಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ</string>
+
+    <!--    Student Level Assessment Screen-->
+    <string name="select_class_label">ನಿಮ್ಮ ತರಗತಿಯನ್ನು ಆಯ್ಕೆಮಾಡಿ</string>
+
+    <!--    Learning Latent Screen-->
+    <string name="learning_intent_title">ಕಲಿಕಾ ಉದ್ದೇಶ</string>
+    <string name="learning_intent_subtitle">ನಿಮ್ಮ AI ಬೋಧನಾ ಅನುಭವವನ್ನು ವೈಯಕ್ತಿಕಗೊಳಿಸಲು ನಿಮ್ಮ ಕಲಿಕಾ ಗುರಿಯನ್ನು ಅರ್ಥಮಾಡಿಕೊಳ್ಳಲು ನಮಗೆ ಸಹಾಯ ಮಾಡಿ</string>
+
+    <string name="what_type_of_learner">ನೀವು ಇಂದು ಯಾವ ರೀತಿಯ ಕಲಿಯುವವರು?</string>
+    <string name="concept_learner">ಪರಿಕಲ್ಪನೆ ಕಲಿಯುವವರು</string>
+    <string name="concept_learner_sub">ನಾನು ಪರಿಕಲ್ಪನೆಗಳನ್ನು ಆಳವಾಗಿ ಅರ್ಥಮಾಡಿಕೊಳ್ಳಲು ಮತ್ತು ಬಲವಾದ ಅಡಿಪಾಯ ನಿರ್ಮಿಸಲು ಬಯಸುತ್ತೇನೆ</string>
+    <string name="exam_oriented">ಪರೀಕ್ಷಾ ಆಧಾರಿತ</string>
+    <string name="exam_oriented_sub">ನಾನು ಪರೀಕ್ಷೆಗಳಿಗೆ ತಯಾರಿ ಮಾಡಲು ಮತ್ತು ಅಭ್ಯಾಸ ಸಮಸ್ಯೆಗಳ ಮೇಲೆ ಗಮನಹರಿಸಲು ಬಯಸುತ್ತೇನೆ</string>
+
+    <string name="select_concept_approach">ನಿಮ್ಮ ಪರಿಕಲ್ಪನೆ ಕಲಿಕಾ ವಿಧಾನವನ್ನು ಆಯ್ಕೆಮಾಡಿ:</string>
+    <string name="first_time_learner">ಮೊದಲ ಬಾರಿಗೆ ಕಲಿಯುವವರು</string>
+    <string name="first_time_learner_sub">ನಾನು ಈ ಪರಿಕಲ್ಪನೆಗಳನ್ನು ಮೊದಲ ಬಾರಿಗೆ ಕಲಿಯುತ್ತಿದ್ದೇನೆ ಮತ್ತು ವಿವರವಾದ ವಿವರಣೆಗಳು ಬೇಕು</string>
+    <string name="revision">ಪುನರಾವರ್ತನೆ</string>
+    <string name="revision_sub">ನಾನು ಈ ವಿಷಯಗಳನ್ನು ಮೊದಲು ಅಧ್ಯಯನ ಮಾಡಿದ್ದೇನೆ ಮತ್ತು ನನ್ನ ತಿಳುವಳಿಕೆಯನ್ನು ಪರಿಶೀಲಿಸಲು ಮತ್ತು ಬಲಪಡಿಸಲು ಬಯಸುತ್ತೇನೆ</string>
+
+    <string name="time_for_learning">ಕಲಿಯಲು ನಿಮ್ಮ ಬಳಿ ಎಷ್ಟು ಸಮಯವಿದೆ?</string>
+    <string name="less_time">ಕಡಿಮೆ ಸಮಯ ಲಭ್ಯವಿದೆ</string>
+    <string name="less_time_sub">ಪ್ರಮುಖ ವಿಷಯಗಳು ಮತ್ತು ಶಾರ್ಟ್‌ಕಟ್‌ಗಳ ಮೇಲೆ ಗಮನಹರಿಸುವ ತ್ವರಿತ ಪುನರಾವರ್ತನೆ</string>
+    <string name="medium_time">ಮಧ್ಯಮ ಸಮಯ ಲಭ್ಯವಿದೆ</string>
+    <string name="medium_time_sub">ಅಭ್ಯಾಸ ಸಮಸ್ಯೆಗಳು ಮತ್ತು ಪರಿಕಲ್ಪನೆ ಪರಿಶೀಲನೆಯೊಂದಿಗೆ ಸಮತೋಲಿತ ವಿಧಾನ</string>
+    <string name="high_time">ಹೆಚ್ಚು ಸಮಯ ಲಭ್ಯವಿದೆ</string>
+    <string name="high_time_sub">ವಿವರವಾದ ಅಭ್ಯಾಸ ಮತ್ತು ಬಹು ಪ್ರಶ್ನೆ ಪ್ರಕಾರಗಳೊಂದಿಗೆ ಸಮಗ್ರ ತಯಾರಿ</string>
+
+    <string name="summary_title">ಪ್ರಾರಂಭಿಸಲು ಸಿದ್ಧರಾಗಿದ್ದೀರಾ?</string>
+    <string name="summary_message">ನಿಮ್ಮ ಆಯ್ಕೆಯ ಆದ್ಯತೆಗಳ ಆಧಾರದ ಮೇಲೆ ನಾವು ನಿಮ್ಮ AI ಬೋಧನಾ ಅನುಭವವನ್ನು ಸರಿಹೊಂದಿಸುತ್ತೇವೆ.</string>
+    <string name="start_tutoring">ವೈಯಕ್ತಿಕಗೊಳಿಸಿದ AI ಬೋಧನೆಯನ್ನು ಪ್ರಾರಂಭಿಸಿ</string>
+    <string name="api_base_url">http://13.51.167.156:8000/</string>
+
+    <string name="ai_tutor_name">AI ಬೋಧಕ ಸಾರಾ</string>
+    <string name="select_language">ಭಾಷೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ</string>
+    <string name="language">ಭಾಷೆ</string>
+    <string name="option_english">ಇಂಗ್ಲಿಷ್</string>
+    <string name="option_kannada">ಕನ್ನಡ</string>
+    <string name="select_avatar">ಅವತಾರವನ್ನು ಆಯ್ಕೆಮಾಡಿ</string>
+    <string name="avatar">ಅವತಾರ</string>
+    <string name="boy">ಹುಡುಗ</string>
+    <string name="girl">ಹುಡುಗಿ</string>
+    <string name="select_voice">ಸ್ವರವನ್ನು ಆಯ್ಕೆಮಾಡಿ</string>
+    <string name="voice">ಸ್ವರ</string>
+    <string name="select_speed">ವೇಗವನ್ನು ಆಯ್ಕೆಮಾಡಿ</string>
+    <string name="sarah_is_saying">ಸಾರಾ ಹೇಳುತ್ತಿದ್ದಾಳೆ:</string>
+    <string name="loading_topics">ವಿಷಯಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ...</string>
+    <string name="select_concepts">ಪರಿಕಲ್ಪನೆಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ</string>
+    <string name="tap_to_choose_topic">ವಿಷಯವನ್ನು ಆಯ್ಕೆ ಮಾಡಲು ಟ್ಯಾಪ್ ಮಾಡಿ</string>
+    <string name="agent_state">ಏಜೆಂಟ್ ರಾಜ್ಯ</string>
+    <string name="ask_Sarah_a_question">ಸಾರಾಗೆ ಪ್ರಶ್ನೆ ಕೇಳಿ...</string>
+    <string name="no_internet_connection">ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕವಿಲ್ಲ</string>
+    <string name="sending">ಕಳುಹಿಸಲಾಗುತ್ತಿದೆ...</string>
+    <string name="tap_to_send">ಕಳುಹಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ</string>
+    <string name="previous_conversation">ಹಿಂದಿನ ಸಂಭಾಷಣೆ</string>
+    <string name="no_conversation_yet">ಇನ್ನೂ ಯಾವುದೇ ಸಂಭಾಷಣೆ ಇಲ್ಲ...</string>
+    <string name="speed">ವೇಗ</string>
+    <string name="settings">ಸೆಟ್ಟಿಂಗ್ಗಳು</string>
+    <string name="start_msg">"ಹಾಯ್! ನಿಮಗೆ ಕಲಿಯಲು ಸಹಾಯ ಮಾಡಲು ನಾನು ಸಿದ್ಧನಿದ್ದೇನೆ. ನೀವು ಇಂದು ಏನು ಕೆಲಸ ಮಾಡಲು ಬಯಸುತ್ತೀರಿ?"</string>
+    <string name="learning">ನಿಮ್ಮ ಕಲಿಕೆ</string>
+
+    <string name="existing_session_found">ಅಸ್ತಿತ್ವದಲ್ಲಿರುವ ಸೆಷನ್ ಕಂಡುಬಂದಿದೆ</string>
+    <string name="resume_or_start_fresh">ಈ ವಿಷಯಕ್ಕೆ ಸಂಬಂಧಿಸಿದಂತೆ ನೀವು ಹಿಂದಿನ ಅವಧಿಯನ್ನು ಹೊಂದಿದ್ದೀರಿ. ನೀವು ನಿಲ್ಲಿಸಿದ ಸ್ಥಳದಿಂದ ಮುಂದುವರಿಸಲು ಅಥವಾ ಹೊಸದಾಗಿ ಪ್ರಾರಂಭಿಸಲು ಬಯಸುವಿರಾ?</string>
+    <string name="continue_session">ಮುಂದುವರಿಸಿ</string>
+    <string name="start_new">ಹೊಸದನ್ನು ಪ್ರಾರಂಭಿಸಿ</string>
+
+</resources>

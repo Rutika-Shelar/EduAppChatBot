@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-t" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Android Lip Sync</title>
+  <style>
+    /* Basic styling for seamless integration */
+    body {
+        background: transparent; /* Allows Compose background to show through */
+        font-family: Arial, sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        overflow: hidden; /* Prevents scrollbars */
+    }
+
+    .container {
+        text-align: center;
+        position: relative;
+        width: 100%;
+        height: 100%;
+    }
+
+    .stage {
+        position: relative;
+        display: inline-block;
+        width: 100%;
+        height: 100%;
+        max-width: 100%;
+        max-height: 100%;
+    }
+
+    .character {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+    }
+
+    /* Mouth overlay - Now responsive using percentages */
+    .mouth-container {
+        position: absolute;
+        left: 50%;
+        top: 48%;
+        top: 48%;
+        transform: translate(-50%, -30%); /* Center horizontally, position vertically relative to center */
+        width: 12%;  /* Responsive width relative to container */
+        height: 12%;  /* Responsive height relative to container */
+        pointer-events: none;
+        min-width: 40px;  /* Minimum size for very small screens */
+        min-height: 30px;
+        max-width: 250px; /* Maximum size for very large screens */
+        max-height: 80px;
+    }
+
+    svg.mouth {
+        width: 100%;
+        height: 100%;
+    }
+
+    .mouth-set g {
+        opacity: 0;
+        transition: opacity 80ms ease-out;
+    }
+    .mouth-set g.active {
+        opacity: 1;
+    }
+
+
+
+    /* Debug overlay */
+    .debug-info {
+        position: absolute;
+        top: 5px;
+        left: 5px;
+        background: rgba(0, 0, 0, 0.6);
+        color: #0f0;
+        font-family: monospace;
+        padding: 5px;
+        border-radius: 4px;
+        font-size: 12px;
+        display: none; /* Hidden by default */
+        text-align: left;
+    }
+    .container.debug-mode .debug-info {
+        display: block; /* Show when in debug mode */
+    }
+
+    /* Responsive adjustments for different screen sizes */
+    @media (max-width: 480px) {
+        .mouth-container {
+            width: 15%;
+            height: 10%;
+            transform: translate(-50%, -25%);
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .mouth-container {
+            width: 10%;
+            height: 6%;
+            transform: translate(-50%, -35%);
+        }
+    }
+
+    /* Additional responsive adjustments for very wide or tall screens */
+    @media (aspect-ratio > 2/1) {
+        .mouth-container {
+            width: 8%;
+            height: 12%;
+        }
+    }
+
+    @media (aspect-ratio < 1/2) {
+        .mouth-container {
+            width: 18%;
+            height: 6%;
+        }
+    }
+  </style>
+</head>
+<body>
+<div class="container" id="container">
+  <div class="stage">
+    <img id="characterImage" src="images/boy.png" class="character" alt="Character"/>
+    <div class="mouth-container">
+      <svg class="mouth" viewBox="-50 -50 100 100">
+        <g class="mouth-set" id="mouthSet">
+          <g data-viseme="rest"><path d="M-26 6 q26 10 52 0" fill="#c33" stroke="#000" stroke-width="1"/></g>
+          <g data-viseme="closed"><rect x="-30" y="-6" width="60" height="12" rx="6" fill="#9b2b2b"/></g>
+          <g data-viseme="wide"><ellipse cx="0" cy="6" rx="42" ry="14" fill="#9b2b2b"/></g>
+          <g data-viseme="open"><ellipse cx="0" cy="8" rx="36" ry="22" fill="#9b2b2b"/></g>
+          <g data-viseme="round"><ellipse cx="0" cy="6" rx="22" ry="26" fill="#9b2b2b"/></g>
+          <g data-viseme="f_v"><path d="M-28 6 q28 -24 56 0" fill="none" stroke="#000" stroke-width="3"/><rect x="-20" y="2" width="40" height="6" rx="3" fill="#9b2b2b"/></g>
+          <g data-viseme="th"><rect x="-18" y="0" width="36" height="8" rx="4" fill="#9b2b2b"/><rect x="-6" y="-8" width="12" height="8" rx="3" fill="#ffe8d6"/></g>
+          <g data-viseme="smush"><ellipse cx="0" cy="6" rx="28" ry="12" fill="#9b2b2b"/></g>
+          <g data-viseme="kiss"><ellipse cx="0" cy="6" rx="16" ry="12" fill="#9b2b2b"/></g>
+        </g>
+      </svg>
+    </div>
+  </div>
+  <div class="debug-info">
+    Viseme: <strong id="visemeName">rest</strong><br>
+    Character: <strong id="debugCharacter">boy</strong>
+  </div>
+</div>
+
+<script>
+  const container = document.getElementById("container");
+  const visemeName = document.getElementById("visemeName");
+  const debugCharacter = document.getElementById("debugCharacter");
+  const mouthSet = document.getElementById("mouthSet");
+  const characterImage = document.getElementById("characterImage");
+
+  let animationQueue = [], animationTimer = null, isAnimating = false;
+  let currentCharacter = 'boy';
+
+  const characters = { boy: { image: '' }, girl: { image: '' } };
+
+  // Detect script
+  function detectScript(text) {
+    if (/[\u0C80-\u0CFF]/.test(text)) return 'kannada';
+    if (/[\u0900-\u097F]/.test(text)) return 'devanagari';
+    if (/[\u0B80-\u0BFF]/.test(text)) return 'tamil';
+    if (/[\u0C00-\u0C7F]/.test(text)) return 'telugu';
+    return 'latin';
+  }
+
+  // === KANNADA SMART SYLLABLE PARSER ===
+  // Groups consonant + vowel signs into proper syllables
+  function parseKannadaSyllables(text) {
+    const syllables = [];
+    let current = '';
+
+    for (const ch of text) {
+      const code = ch.codePointAt(0);
+
+      // Kannada consonants: U+0C85 – U+0C94 (vowels), U+0C95 – U+0CB9 (consonants), signs U+0CBC–0CCC
+      if ((code >= 0x0C95 && code <= 0x0CB9) || // consonant
+          (code >= 0x0C80 && code <= 0x0CFF && // any Kannada char
+           !/\s/.test(ch) && !current)) {
+        if (current) syllables.push(current);
+        current = ch;
+      } else if (code >= 0x0CBC && code <= 0x0CCC) { // vowel signs
+        current += ch;
+      } else if (/\s/.test(ch)) {
+        if (current) syllables.push(current);
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    if (current) syllables.push(current);
+    return syllables;
+  }
+
+  // Map full Kannada syllable (or vowel) to viseme + longer duration for vowels
+  function kannadaSyllableToViseme(syllable) {
+    // Check for independent vowels first
+    const independentVowels = 'ಅಆಇಈಉಊಋಎಏಐಒಓಔ';
+    const rounded = 'ಉಊಒಓಔ';
+    const front = 'ಇಈಎಏಐ';
+    const open = 'ಅಆ';
+
+    if (independentVowels.includes(syllable[0])) {
+      if (rounded.includes(syllable[0])) return { viseme: 'round', duration: 220 };
+      if (front.includes(syllable[0])) return { viseme: 'wide', duration: 200 };
+      if (open.includes(syllable[0])) return { viseme: 'open', duration: 240 }; // ← BIG OPEN!
+      return { viseme: 'open', duration: 220 };
+    }
+
+    // Vowel signs attached (most common case: ಕ + ಾ = ಕಾ)
+    const hasOpenVowelSign = /[\u0CBE\u0CCC]/.test(syllable); // ಾ ೌ
+    const hasRoundVowelSign = /[\u0CC1\u0CC2\u0CC6\u0CC7\u0CC8\u0CCB\u0CCC]/.test(syllable);
+    const hasWideVowelSign = /[\u0CBF\u0CC0\u0CC3\u0CC4]/.test(syllable);
+
+    if (hasOpenVowelSign) return { viseme: 'open', duration: 250 };   // ← MAX OPEN
+    if (hasRoundVowelSign) return { viseme: 'round', duration: 200 };
+    if (hasWideVowelSign) return { viseme: 'wide', duration: 190 };
+
+    // Labial consonants → closed mouth
+    if (/[ಪಬಮ]/.test(syllable)) return { viseme: 'closed', duration: 140 };
+    if (/[ಸಶಷ]/.test(syllable)) return { viseme: 'smush', duration: 130 };
+    if (/[ತದ]/.test(syllable)) return { viseme: 'th', duration: 130 };
+
+    return { viseme: 'rest', duration: 100 };
+  }
+
+  // English G2P (slightly improved)
+  function englishG2P(text) {
+    const s = text.toLowerCase().replace(/[^a-z\s]/g, ' ');
+    const tokens = [];
+    let i = 0;
+    while (i < s.length) {
+      if (s[i] === ' ') { i++; continue; }
+      const two = s.substr(i, 2);
+      if (['ch','sh','th','ng','ph','qu','wh'].includes(two)) {
+        tokens.push(two); i += 2;
+      } else {
+        tokens.push(s[i]); i++;
+      }
+    }
+    return tokens;
+  }
+
+  function englishPhonemeToViseme(p) {
+    if (['p','b','m'].includes(p)) return { viseme: 'closed', duration: 140 };
+    if (['f','v'].includes(p)) return { viseme: 'f_v', duration: 140 };
+    if ('th'.includes(p)) return { viseme: 'th', duration: 140 };
+    if ('aeiou'.includes(p)) {
+      if ('ou'.includes(p)) return { viseme: 'round', duration: 220 };
+      if ('ei'.includes(p)) return { viseme: 'wide', duration: 200 };
+      return { viseme: 'open', duration: 240 };
+    }
+    return { viseme: 'rest', duration: 100 };
+  }
+
+  // Main pipeline
+  function prepareAnimationQueue(text) {
+    const script = detectScript(text);
+    let frames = [];
+
+    if (script === 'latin') {
+      const tokens = englishG2P(text);
+      frames = tokens.map(t => englishPhonemeToViseme(t));
+    } else if (script === 'kannada') {
+      const syllables = parseKannadaSyllables(text);
+      frames = syllables.map(s => kannadaSyllableToViseme(s));
+    } else {
+      // Fallback: treat any non-Latin as Kannada-style
+      const chars = Array.from(text.replace(/\s+/g, ' '));
+      frames = chars.filter(c => !/\s/.test(c)).map(ch => {
+        if (/[\u0CBE\u0CCC]/.test(ch)) return { viseme: 'open', duration: 250 };
+        if (/[ಪಬಮ]/.test(ch)) return { viseme: 'closed', duration: 140 };
+        return { viseme: 'rest', duration: 100 };
+      });
+    }
+
+    // Compress consecutive same visemes
+    const compressed = [];
+    for (const f of frames) {
+      const last = compressed[compressed.length - 1];
+      if (last && last.viseme === f.viseme) {
+        last.duration += f.duration;
+      } else {
+        compressed.push({ ...f });
+      }
+    }
+    return compressed;
+  }
+
+  // Animation engine
+  function setViseme(v) {
+    mouthSet.querySelectorAll("[data-viseme]").forEach(g => g.classList.remove("active"));
+    const el = mouthSet.querySelector(`[data-viseme="${v}"]`);
+    if (el) el.classList.add("active");
+    if (visemeName) visemeName.innerText = v;
+  }
+
+  function stepAnimationQueue() {
+    if (!isAnimating) return;
+    if (animationQueue.length === 0) {
+      setViseme("rest");
+      isAnimating = false;
+      return;
+    }
+    const frame = animationQueue.shift();
+    setViseme(frame.viseme);
+    animationTimer = setTimeout(stepAnimationQueue, frame.duration);
+  }
+
+  function stopAnimation() {
+    isAnimating = false;
+    animationQueue = [];
+    if (animationTimer) clearTimeout(animationTimer);
+    setViseme("rest");
+  }
+
+  window.AndroidLipSyncAPI = {
+    startLipSync: function(text) {
+      if (!text?.trim()) return;
+      stopAnimation();
+      animationQueue = prepareAnimationQueue(text);
+      if (animationQueue.length > 0) {
+        isAnimating = true;
+        stepAnimationQueue();
+      }
+    },
+    stopLipSync: stopAnimation,
+    switchCharacter: function(c) {
+      if (characters[c]) {
+        currentCharacter = c;
+        characterImage.src = characters[c].image || `images/${c}.png`;
+        if (debugCharacter) debugCharacter.innerText = c;
+      }
+    },
+    toggleDebug: (show) => container.classList.toggle("debug-mode", show),
+    testAnimation: function() {
+      stopAnimation();
+      const seq = ["rest","open","wide","round","closed","f_v","th","smush","kiss"];
+      animationQueue = seq.map(v => ({ viseme: v, duration: 350 }));
+      isAnimating = true;
+      stepAnimationQueue();
+    }
+  };
+
+  window.lipSync = {
+    setImageData: function(data) {
+      if (data.boy) characters.boy.image = data.boy;
+      if (data.girl) characters.girl.image = data.girl;
+      window.AndroidLipSyncAPI.switchCharacter(currentCharacter);
+    }
+  };
+
+  setViseme("rest");
+</script></body>
+</html>

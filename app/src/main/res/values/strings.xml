@@ -1,0 +1,107 @@
+<resources>
+    <string name="app_name">EduAppChatBot</string>
+
+    <!--    Language Selection Screen -->
+    <string name="select_your_language">Select Your Language</string>
+    <string name="language_icon_desc">Language Icon</string>
+    <string name="language_subtitle">Choose your preferred language for the AI tutoring experience</string>
+    <string name="continue_">Continue</string>
+    <string name="lang_english">English</string>
+    <string name="lang_kannada">Kannada</string>
+    <string name="lang_hindi">Hindi</string>
+    <string name="lang_telugu">Telugu</string>
+    <string name="tamil">Tamil</string>
+
+    <!--    Google Sign up Screen-->
+    <string name="google_sign_in">Continue with Google</string>
+    <string name="ai_tutor_platform">AI Tutor Platform</string>
+    <string name="personilized_learning_message">Personalized learning for students from \n Class 1st to 10th</string>
+    <string name="welcome_back">Welcome back !</string>
+
+    <!--    User Detail Entry Screen-->
+    <string name="welcome_to_ai_tutor_message">Welcome to AI Tutor!</string>
+    <string name="lets_go_to_know_you_message">Let\'s get to know you better to personalize your learning experience</string>
+
+    <string name="full_name_label">Full Name</string>
+    <string name="phone_number_label">Phone Number</string>
+    <string name="your_ambition_label">Your Ambition</string>
+    <string name="school_name_label">School Name</string>
+
+    <string name="full_name_hint">Enter your full name</string>
+    <string name="phone_number_hint">Enter your phone number</string>
+    <string name="your_ambition_hint">What do you want to become</string>
+    <string name="school_name_hint">Enter your school name</string>
+    <string name="get_started">Get Started</string>
+
+    <!--    Study Session Setup Screen-->
+    <string name="select_class">Select Class</string>
+    <string name="select_syllabus">Select Syllabus</string>
+    <string name="select_subject">Select Subject</string>
+
+    <string name="select_chapter_to_study">Select Chapters to Study</string>
+
+    <!--    Student Level Assessment Screen-->
+    <string name="select_class_label">Select Your Class</string>
+
+    <!--    Learning Latent Screen-->
+    <string name="learning_intent_title">Learning Intent</string>
+    <string name="learning_intent_subtitle">Help us understand your learning goal to personalize your AI tutoring experience</string>
+
+    <string name="what_type_of_learner">What type of learner are you today?</string>
+    <string name="concept_learner">Concept Learner</string>
+    <string name="concept_learner_sub">I want to understand concepts deeply and build strong foundations</string>
+    <string name="exam_oriented">Exam Oriented</string>
+    <string name="exam_oriented_sub">I want to prepare for exams and focus on practice problems</string>
+
+    <string name="select_concept_approach">Select your concept learning approach:</string>
+    <string name="first_time_learner">First Time Learner</string>
+    <string name="first_time_learner_sub">I\'m learning these concepts for the first time and need detailed explanations</string>
+    <string name="revision">Revision</string>
+    <string name="revision_sub">I\'ve studied these topics before and want to review and strengthen my understanding</string>
+
+    <string name="time_for_learning">How much time do you have for learning?</string>
+    <string name="less_time">Less Time Available</string>
+    <string name="less_time_sub">Quick revision with focus on important topics and shortcuts</string>
+    <string name="medium_time">Medium Time Available</string>
+    <string name="medium_time_sub">Balanced approach with practice problems and concept review</string>
+    <string name="high_time">High Time Available</string>
+    <string name="high_time_sub">Comprehensive preparation with detailed practice and multiple question types</string>
+
+    <string name="summary_title">Ready to Begin?</string>
+    <string name="summary_message">We’ll tailor your AI tutoring experience based on your chosen preferences.</string>
+    <string name="start_tutoring">Start Personalized AI Tutoring</string>
+    <string name="api_base_url">http://13.51.167.156:8000/</string>
+
+    <string name="ai_tutor_name">AI Tutor Sarah</string>
+    <string name="select_language">Select Language</string>
+    <string name="language">Language</string>
+    <string name="option_english">English</string>
+    <string name="option_kannada">Kannada</string>
+    <string name="select_avatar">Select Avatar</string>
+    <string name="avatar">Avatar</string>
+    <string name="boy">boy</string>
+    <string name="girl">girl</string>
+    <string name="select_voice">Select Voice</string>
+    <string name="voice">Voice</string>
+    <string name="select_speed">Select Speed</string>
+<string name="sarah_is_saying">Sarah is saying:</string>
+    <string name="loading_topics">Loading topics...</string>
+    <string name="select_concepts">Select Concepts</string>
+    <string name="tap_to_choose_topic">Tap to choose a topic…</string>
+    <string name="agent_state">agent_state</string>
+    <string name="ask_Sarah_a_question">Ask Sarah a question...</string>
+    <string name="no_internet_connection">No internet connection</string>
+    <string name="sending">Sending...</string>
+    <string name="tap_to_send">Tap to send</string>
+    <string name="previous_conversation">Previous Conversation</string>
+<string name="no_conversation_yet">No conversation yet...</string>
+    <string name="speed">Speed</string>
+    <string name="settings">Settings</string>
+    <string name="start_msg">Hi! I\'m ready to help you learn. What would you like to work on today?</string>
+    <string name="learning">Your learning</string>
+
+    <string name="existing_session_found">Existing Session Found</string>
+    <string name="resume_or_start_fresh">You have a previous session for this topic. Would you like to continue where you left off or start new?</string>
+    <string name="continue_session">Continue</string>
+    <string name="start_new">Start New</string>
+</resources>

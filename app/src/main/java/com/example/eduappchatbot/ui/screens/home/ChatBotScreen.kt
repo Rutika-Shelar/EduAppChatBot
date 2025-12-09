@@ -1,0 +1,840 @@
+package com.example.eduappchatbot.ui.screens.home
+
+import android.Manifest
+import android.content.pm.PackageManager
+import android.webkit.WebView
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.SmartToy
+import androidx.compose.material.icons.outlined.Stop
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.eduappchatbot.R
+import com.example.eduappchatbot.core.chatBot.ChatViewModel
+import com.example.eduappchatbot.data.repository.UserSessionRepository
+import com.example.eduappchatbot.ui.components.*
+import com.example.eduappchatbot.ui.theme.*
+import com.example.eduappchatbot.utils.ConceptMapUtils
+import com.example.eduappchatbot.utils.DebugLogger
+import com.example.eduappchatbot.utils.LanguageChangeHelper
+import com.example.eduappchatbot.viewModels.speechModels.SpeechToText
+import com.example.eduappchatbot.viewModels.speechModels.TextToSpeech
+import kotlinx.coroutines.delay
+
+@Composable
+fun ChatBotScreen(
+    chatViewModel: ChatViewModel,
+    ttsController: TextToSpeech = viewModel(),
+    sttController: SpeechToText = viewModel(),
+) {
+    val context = LocalContext.current
+
+    val ttsState by ttsController.state.collectAsState()
+    val sttState by sttController.state.collectAsState()
+
+    var currentAudioTime by remember { mutableFloatStateOf(0f) }
+    val chatMessages by chatViewModel.messages.collectAsState()
+    val isChatLoading by chatViewModel.isLoading.collectAsState()
+    val conceptMapJSON by chatViewModel.conceptMapJSON.collectAsState()
+    val typingText by chatViewModel.typingText.collectAsState()
+    val isTyping by chatViewModel.isTyping.collectAsState()
+    val shouldStartTTS by chatViewModel.shouldStartTTS.collectAsState()
+    val conceptMapAvailable = remember(conceptMapJSON) {
+        ConceptMapUtils.hasConceptMapContent(conceptMapJSON)
+    }
+
+    val userRepository = remember { UserSessionRepository(context.applicationContext) }
+    val currentLanguage by chatViewModel.currentLanguage.collectAsState()
+
+    val agentMetadata by chatViewModel.agentMetadata.collectAsState()
+    val isNetworkConnected by chatViewModel.isConnected.collectAsState()
+    val imageUrl = agentMetadata?.imageUrl?.takeIf { it.isNotBlank() && it != "null" }
+    val videoUrl = agentMetadata?.videoUrl?.takeIf { it.isNotBlank() && it != "null" }
+    val agentState by chatViewModel.agentState.collectAsState()
+
+    var showSettingsMenu by remember { mutableStateOf(false) }
+    var selectedLanguage by remember { mutableStateOf(currentLanguage) }
+
+    val englishDisplayName = stringResource(R.string.option_english)
+    val kannadaDisplayName = stringResource(R.string.option_kannada)
+    val boyDisplayName = stringResource(R.string.boy)
+    val girlDisplayName = stringResource(R.string.girl)
+
+    var selectedAvatar by remember { mutableStateOf("boy") }
+
+    val chatHistoryListState = rememberLazyListState()
+    val mainScreenListState = rememberLazyListState()
+
+    var messageInput by remember { mutableStateOf("") }
+    var selectedSpeed by remember { mutableStateOf("0.75x") }
+
+    val translatedOutput by chatViewModel.translatedOutput.collectAsState()
+    val startMessage = stringResource(R.string.start_msg)
+
+    val aiMessageOutput = remember(isTyping, typingText, translatedOutput) {
+        when {
+            isTyping -> typingText
+            translatedOutput.isNotBlank() -> translatedOutput
+            else -> startMessage
+        }
+    }
+
+    var showSessionResumeDialog by remember { mutableStateOf(false) }
+    var pendingConceptSelection by remember { mutableStateOf<String?>(null) }
+
+    val availableConcepts by chatViewModel.availableConcepts.collectAsState()
+    val selectedConcept by chatViewModel.selectedConcept.collectAsState()
+    val visualNodes = remember { setOf("CI", "GE") }
+
+    val hasAnyVisualContent = remember(conceptMapAvailable, agentState, imageUrl, videoUrl) {
+        val hasRelevantNode = visualNodes.any { it.equals(agentState, ignoreCase = true) }
+        val showConceptMap = hasRelevantNode && conceptMapAvailable
+        val hasImage = imageUrl != null
+        val hasVideo = videoUrl != null
+        showConceptMap || hasImage || hasVideo
+    }
+
+    val voiceOptions = remember(ttsState.availableVoices, currentLanguage, selectedAvatar) {
+        ttsController.getFilteredVoiceOptions(currentLanguage, selectedAvatar)
+    }
+
+    val displayedVoiceName = remember(ttsState.selectedVoice, currentLanguage, selectedAvatar) {
+        if (ttsState.selectedVoice != null) {
+            ttsController.formatVoiceName(ttsState.selectedVoice!!)
+        } else {
+            ttsController.getDefaultVoiceName(currentLanguage, selectedAvatar)
+        }
+    }
+
+    LaunchedEffect(ttsState.isSpeaking) {
+        if (ttsState.isSpeaking) {
+            val startTime = System.currentTimeMillis()
+            while (ttsState.isSpeaking) {
+                currentAudioTime = (System.currentTimeMillis() - startTime) / 1000f
+                delay(50)
+            }
+        } else {
+            currentAudioTime = 0f
+        }
+    }
+
+    LaunchedEffect(shouldStartTTS) {
+        if (shouldStartTTS && ttsState.isInitialized) {
+            val textToSpeak = when {
+                translatedOutput.isNotBlank() -> translatedOutput
+                else -> startMessage
+            }
+
+            if (textToSpeak.isNotBlank()) {
+                if (sttState.isListening) {
+                    sttController.stopListening()
+                }
+                ttsController.speak(textToSpeak)
+            }
+        }
+    }
+    // Initialize TTS settings when ready
+    LaunchedEffect(ttsState.isInitialized, ttsState.voicesFullyLoaded) {
+        if (ttsState.isInitialized && ttsState.voicesFullyLoaded && ttsState.availableVoices.isNotEmpty()) {
+            val savedAvatar =
+                ttsState.selectedCharacter.takeIf { it.isNotBlank() } ?: selectedAvatar
+            selectedAvatar = savedAvatar
+            ttsController.switchCharacter(savedAvatar)
+            ttsController.applyDefaultsForAvatarLanguage(savedAvatar, currentLanguage)
+
+            selectedSpeed = when (ttsState.speechRate) {
+                in 0.0f..0.8f -> "0.75x"
+                in 0.8f..1.1f -> "1.0x"
+                in 1.1f..1.3f -> "1.25x"
+                else -> "1.5x"
+            }
+        }
+    }
+
+    LaunchedEffect(sttState.resultText) {
+        if (sttState.resultText.isNotBlank()) {
+            messageInput = sttState.resultText
+        }
+    }
+
+    LaunchedEffect(chatMessages.size) {
+        if (chatMessages.isNotEmpty()) {
+            delay(100)
+            chatHistoryListState.animateScrollToItem(chatMessages.size - 1)
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        sttController.handlePermissionResult(
+            SpeechToText.RECORD_AUDIO_PERMISSION_REQUEST,
+            if (isGranted) intArrayOf(PackageManager.PERMISSION_GRANTED)
+            else intArrayOf(PackageManager.PERMISSION_DENIED)
+        )
+    }
+// Initialize components on first composition
+    LaunchedEffect(Unit) {
+        DebugLogger.debugLog("ChatBotScreen", "Starting initialization")
+
+        chatViewModel.initialize(context)
+        sttController.initialize(context)
+        ttsController.initialize(context)
+
+        val fullTag = when (currentLanguage) {
+            "en" -> "en-IN"
+            "kn" -> "kn-IN"
+            "hi" -> "hi-IN"
+            "ta" -> "ta-IN"
+            "te" -> "te-IN"
+            else -> "en-IN"
+        }
+
+        LanguageChangeHelper.changeLanguage(context, fullTag)
+        sttController.setLanguage(fullTag)
+
+        if (!sttState.hasPermission) {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+
+        DebugLogger.debugLog("ChatBotScreen", "Initialization complete")
+    }
+
+    LaunchedEffect(currentLanguage) {
+        selectedLanguage = currentLanguage
+
+        val fullTag = when (currentLanguage) {
+            "en" -> "en-IN"
+            "kn" -> "kn-IN"
+            "hi" -> "hi-IN"
+            "ta" -> "ta-IN"
+            "te" -> "te-IN"
+            else -> "en-IN"
+        }
+        sttController.setLanguage(fullTag)
+        LanguageChangeHelper.changeLanguage(context, fullTag)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            sttController.destroy()
+            ttsController.cleanup()
+            chatViewModel.stopNetworkObservation()
+        }
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(White)
+    ) {
+        LazyColumn(
+            state = mainScreenListState,
+            modifier = Modifier
+                .fillMaxSize()
+                .background(White)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            contentPadding = PaddingValues(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // AI Tutor Name Header
+            item {
+                Column(
+                    horizontalAlignment = Alignment.Start,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = stringResource(R.string.ai_tutor_name),
+                        color = TextPrimary,
+                        style = MaterialTheme.typography.headlineMedium
+                    )
+                }
+            }
+            // Chat Card
+            item {
+                Card(
+                    elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight()
+                        .padding(vertical = 20.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.background(BackgroundPrimary)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(170.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Card(
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
+                                    modifier = Modifier
+                                        .width(120.dp)
+                                        .height(160.dp)
+                                ) {
+                                    AndroidView(factory = {
+                                        WebView(context).apply {
+                                            ttsController.setupWebView(this)
+                                        }
+                                    })
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .wrapContentSize(Alignment.TopEnd)
+                                ) {
+                                    IconButton(
+                                        onClick = { showSettingsMenu = true }
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Settings,
+                                            contentDescription = "Settings",
+                                            tint = IconPrimary,
+                                            modifier = Modifier.size(32.dp)
+                                        )
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = showSettingsMenu,
+                                        onDismissRequest = { showSettingsMenu = false },
+                                        modifier = Modifier
+                                            .background(White)
+                                            .border(1.dp, BrandPrimary, RoundedCornerShape(0.dp))
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .padding(12.dp)
+                                                .widthIn(min = 220.dp, max = 320.dp)
+                                        ) {
+                                            Text(
+                                                stringResource(R.string.settings),
+                                                color = Black,
+                                                style = MaterialTheme.typography.titleSmall
+                                            )
+                                            Spacer(Modifier.height(8.dp))
+                                            DropDownMenuModel(
+                                                label = stringResource(R.string.select_language),
+                                                options = listOf(
+                                                    englishDisplayName,
+                                                    kannadaDisplayName
+                                                ),
+                                                selectedValue = when (selectedLanguage) {
+                                                    "en" -> englishDisplayName
+                                                    "kn" -> kannadaDisplayName
+                                                    else -> englishDisplayName
+                                                },
+                                                onValueSelected = { displayName ->
+                                                    val shortCode = when (displayName) {
+                                                        englishDisplayName -> "en"
+                                                        kannadaDisplayName -> "kn"
+                                                        else -> "en"
+                                                    }
+
+                                                    val currentConcept = selectedConcept
+                                                    if (currentConcept != null) {
+                                                        val originalConcept =
+                                                            chatViewModel.getOriginalConceptName(
+                                                                context,
+                                                                currentConcept,
+                                                                selectedLanguage
+                                                            )
+                                                        userRepository.savePreferredConcept(
+                                                            originalConcept
+                                                        )
+                                                    }
+
+                                                    chatViewModel.setCurrentLanguage(shortCode)
+                                                    chatViewModel.refreshAvailableConcepts(
+                                                        context,
+                                                        shortCode
+                                                    )
+
+                                                    val fullTag = when (shortCode) {
+                                                        "en" -> "en-IN"
+                                                        "kn" -> "kn-IN"
+                                                        else -> shortCode
+                                                    }
+                                                    LanguageChangeHelper.changeLanguage(
+                                                        context,
+                                                        fullTag
+                                                    )
+                                                    ttsController.applyDefaultsForAvatarLanguage(
+                                                        selectedAvatar,
+                                                        shortCode
+                                                    )
+                                                    ttsController.setLanguage(fullTag)
+                                                    sttController.setLanguage(fullTag)
+                                                    userRepository.updateLanguage(shortCode)
+                                                }
+                                            )
+                                            Spacer(Modifier.height(12.dp))
+                                            Text(
+                                                stringResource(R.string.select_avatar),
+                                                color = Black,
+                                                style = MaterialTheme.typography.titleSmall
+                                            )
+                                            Spacer(Modifier.height(8.dp))
+                                            DropDownMenuModel(
+                                                label = stringResource(R.string.avatar),
+                                                options = listOf(boyDisplayName, girlDisplayName),
+                                                selectedValue = when (selectedAvatar.lowercase()) {
+                                                    "boy" -> boyDisplayName
+                                                    "girl" -> girlDisplayName
+                                                    else -> boyDisplayName
+                                                },
+                                                onValueSelected = { displayName ->
+                                                    val avatarCode = when (displayName) {
+                                                        boyDisplayName -> "boy"
+                                                        girlDisplayName -> "girl"
+                                                        else -> "boy"
+                                                    }
+                                                    selectedAvatar = avatarCode
+                                                    ttsController.switchCharacter(avatarCode)
+                                                    ttsController.applyDefaultsForAvatarLanguage(
+                                                        avatarCode,
+                                                        currentLanguage
+                                                    )
+                                                }
+                                            )
+                                            Spacer(Modifier.height(12.dp))
+                                            Text(
+                                                stringResource(R.string.select_voice),
+                                                color = Black,
+                                                style = MaterialTheme.typography.titleSmall
+                                            )
+                                            Spacer(Modifier.height(8.dp))
+                                            DropDownMenuModel(
+                                                label = stringResource(R.string.voice),
+                                                options = voiceOptions,
+                                                selectedValue = displayedVoiceName,
+                                                onValueSelected = { selectedDisplayName ->
+                                                    val selectedVoice =
+                                                        ttsState.availableVoices.find {
+                                                            ttsController.formatVoiceName(it) == selectedDisplayName
+                                                        }
+                                                    selectedVoice?.let {
+                                                        ttsController.setVoice(it)
+                                                        if (ttsState.isSpeaking) {
+                                                            ttsController.stop()
+                                                            ttsController.speak(aiMessageOutput)
+                                                        }
+                                                    }
+                                                }
+                                            )
+
+                                            Spacer(Modifier.height(12.dp))
+                                            Text(
+                                                stringResource(R.string.select_speed),
+                                                color = Black,
+                                                style = MaterialTheme.typography.titleSmall
+                                            )
+                                            Spacer(Modifier.height(8.dp))
+                                            DropDownMenuModel(
+                                                label = stringResource(R.string.speed),
+                                                options = listOf("0.75x", "1.0x", "1.25x", "1.5x"),
+                                                selectedValue = selectedSpeed,
+                                                onValueSelected = { label ->
+                                                    selectedSpeed = label
+                                                    val speed = when (label) {
+                                                        "0.75x" -> 0.75f
+                                                        "1.0x" -> 1.0f
+                                                        "1.25x" -> 1.25f
+                                                        "1.5x" -> 1.5f
+                                                        else -> 0.75f
+                                                    }
+                                                    ttsController.setSpeechRate(speed)
+                                                    if (ttsState.isSpeaking) {
+                                                        val currentText = aiMessageOutput
+                                                        ttsController.stop()
+                                                        ttsController.speak(currentText)
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(20.dp))
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .wrapContentHeight()
+                                    .padding(8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.SmartToy,
+                                        contentDescription = "AI Icon",
+                                        tint = AccentBlue
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        stringResource(R.string.sarah_is_saying),
+                                        color = AccentBlue
+                                    )
+                                    Spacer(Modifier.weight(1f))
+
+                                    IconButton(
+                                        onClick = {
+                                            if (ttsState.isInitialized) {
+                                                if (!ttsState.isSpeaking) {
+                                                    if (sttState.isListening) {
+                                                        sttController.stopListening()
+                                                    }
+                                                    ttsController.speak(aiMessageOutput)
+                                                } else {
+                                                    ttsController.stop()
+                                                }
+                                            } else {
+                                                ttsController.initialize(context)
+                                            }
+                                        },
+                                        modifier = Modifier.size(32.dp),
+                                        colors = IconButtonDefaults.iconButtonColors(
+                                            containerColor = BrandPrimary,
+                                            contentColor = Color.White
+                                        )
+                                    ) {
+                                        Icon(
+                                            if (ttsState.isSpeaking) Icons.Default.Stop else Icons.Default.PlayArrow,
+                                            contentDescription = "Play Audio",
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                    }
+                                }
+
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .wrapContentHeight()
+                                ) {
+                                    Column(modifier = Modifier) {
+                                        if (availableConcepts.isEmpty()) {
+                                            Box(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                CircularProgressIndicator(color = BrandPrimary)
+                                            }
+                                            Text(
+                                                text = stringResource(R.string.loading_topics),
+                                                color = TextSecondary,
+                                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                                                    .padding(top = 8.dp)
+                                            )
+                                        } else {
+                                            DropDownMenuModel(
+                                                label = stringResource(R.string.select_concepts),
+                                                options = availableConcepts,
+                                                selectedValue = selectedConcept
+                                                    ?: stringResource(R.string.tap_to_choose_topic),
+                                                onValueSelected = { displayedConcept ->
+                                                    if (chatViewModel.hasExistingSession(
+                                                            displayedConcept,
+                                                            context
+                                                        )
+                                                    ) {
+                                                        pendingConceptSelection = displayedConcept
+                                                        showSessionResumeDialog = true
+                                                    } else {
+                                                        chatViewModel.selectConcept(
+                                                            displayedConcept,
+                                                            context
+                                                        )
+                                                    }
+                                                },
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+                                    }
+                                    ScrollingSubtitle(
+                                        text = aiMessageOutput,
+                                        ttsController = ttsController,
+                                        maxVisibleLines = 5,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+
+                                    if (isTyping) {
+                                        Text(
+                                            text = "▋",
+                                            color = AccentBlue,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                                        )
+                                    }
+
+                                    if (agentState.isNotBlank()) {
+                                        Text(
+                                            text = stringResource(R.string.agent_state) + ": $agentState",
+                                            color = TextSecondary,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            modifier = Modifier.padding(start = 4.dp, top = 6.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TextField(
+                                value = messageInput,
+                                onValueChange = { messageInput = it },
+                                modifier = Modifier.weight(1f),
+                                placeholder = { Text(stringResource(R.string.ask_Sarah_a_question)) },
+                                shape = RoundedCornerShape(20.dp),
+                                singleLine = false,
+                                maxLines = 4,
+                                colors = TextFieldDefaults.colors(
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedContainerColor = BackgroundSecondary,
+                                    focusedContainerColor = BackgroundSecondary,
+                                    cursorColor = ColorHint,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary,
+                                    unfocusedPlaceholderColor = TextSecondary,
+                                    focusedPlaceholderColor = TextSecondary
+                                )
+                            )
+
+                            IconButton(
+                                onClick = {
+                                    if (messageInput.isNotBlank() && !isChatLoading && isNetworkConnected) {
+                                        chatViewModel.sendMessage(messageInput, context)
+                                        messageInput = ""
+                                    }
+                                },
+                                enabled = messageInput.isNotBlank() && !isChatLoading && isNetworkConnected,
+                                modifier = Modifier.size(48.dp),
+                                colors = IconButtonDefaults.iconButtonColors(
+                                    containerColor = if (isNetworkConnected) SendButtonColor else ColorHint,
+                                    contentColor = Color.White,
+                                    disabledContainerColor = ColorHint,
+                                    disabledContentColor = Color.White
+                                )
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = "Send Message"
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    if (sttState.isListening) {
+                                        sttController.stopListening()
+                                    } else {
+                                        if (sttState.hasPermission && sttState.isInitialized) {
+                                            sttController.startListening()
+                                        } else {
+                                            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                        }
+                                    }
+                                },
+                                enabled = !ttsState.isSpeaking && sttState.hasPermission && !isChatLoading,
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .border(1.dp, SendButtonColor, CircleShape)
+                                    .alpha(if (ttsState.isSpeaking) 0.5f else 1f)
+                            ) {
+                                Icon(
+                                    imageVector = if (sttState.isListening) Icons.Outlined.Stop else Icons.Outlined.Mic,
+                                    contentDescription = "Record Audio",
+                                    tint = if (ttsState.isSpeaking || !sttState.hasPermission || isChatLoading)
+                                        Color.Gray else SendButtonColor
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = when {
+                                !isNetworkConnected -> stringResource(R.string.no_internet_connection)
+                                isChatLoading -> stringResource(R.string.sending)
+                                else -> stringResource(R.string.tap_to_send)
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (isNetworkConnected) ColorHint else Color.Red,
+                            modifier = Modifier.padding(start = 20.dp, bottom = 8.dp)
+                        )
+                    }
+                }
+            }
+
+            // Visual Content Card
+            if (hasAnyVisualContent) {
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(500.dp)
+                            .background(BackgroundSecondary),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+                    ) {
+                        SwitchableConceptView(
+                            json = conceptMapJSON,
+                            agentState = agentState,
+                            currentAudioTime = currentAudioTime,
+                            isAudioPlaying = ttsState.isSpeaking,
+                            imageUrl = imageUrl,
+                            imageDescription = agentMetadata?.imageDescription,
+                            videoUrl = videoUrl
+                        )
+                    }
+                }
+            }
+            // Chat History Card
+            item {
+                Card(
+                    elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(White)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .background(BackgroundSecondary)
+                                .fillMaxWidth()
+                                .padding(5.dp, 10.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.History,
+                                contentDescription = "Previous Conversation Icon",
+                                tint = TextPrimary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = stringResource(R.string.previous_conversation),
+                                color = TextPrimary
+                            )
+                        }
+
+                        LazyColumn(
+                            state = chatHistoryListState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(300.dp),
+                            contentPadding = PaddingValues(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (chatMessages.isEmpty()) {
+                                item {
+                                    Text(
+                                        text = stringResource(R.string.no_conversation_yet),
+                                        color = TextSecondary,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.padding(16.dp)
+                                    )
+                                }
+                            } else {
+                                items(chatMessages, key = { it.hashCode() }) { message ->
+                                    ChatMessageBubbleModel(
+                                        message = message,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .animateItem()
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Session Resume Dialog
+    if (showSessionResumeDialog && pendingConceptSelection != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showSessionResumeDialog = false
+                pendingConceptSelection = null
+            },
+            title = {
+                Text(
+                    text = stringResource(R.string.existing_session_found),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = TextPrimary
+                )
+            }, text = {
+                Text(
+                    text = stringResource(R.string.resume_or_start_fresh),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        pendingConceptSelection?.let { concept ->
+                            chatViewModel.selectConcept(concept, context)
+                        }
+                        showSessionResumeDialog = false
+                        pendingConceptSelection = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = BrandPrimary
+                    )
+                ) {
+                    Text(stringResource(R.string.continue_session))
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = {
+                        pendingConceptSelection?.let { concept ->
+                            chatViewModel.startFreshSession(concept, context)
+                        }
+                        showSessionResumeDialog = false
+                        pendingConceptSelection = null
+                    },
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = BrandPrimary
+                    )
+                ) {
+                    Text(stringResource(R.string.start_new))
+                }
+            },
+            containerColor = White
+        )
+    }
+}
