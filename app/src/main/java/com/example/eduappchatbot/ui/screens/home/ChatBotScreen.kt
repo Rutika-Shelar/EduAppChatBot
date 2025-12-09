@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -108,6 +109,7 @@ fun ChatBotScreen(
     var showSessionResumeDialog by remember { mutableStateOf(false) }
     var pendingConceptSelection by remember { mutableStateOf<String?>(null) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     val availableConcepts by chatViewModel.availableConcepts.collectAsState()
     val selectedConcept by chatViewModel.selectedConcept.collectAsState()
@@ -648,6 +650,7 @@ fun ChatBotScreen(
                             IconButton(
                                 onClick = {
                                     if (messageInput.isNotBlank() && !isChatLoading && isNetworkConnected) {
+                                        keyboardController?.hide()
                                         chatViewModel.sendMessage(messageInput, context)
                                         messageInput = ""
                                     }
