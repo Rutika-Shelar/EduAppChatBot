@@ -110,6 +110,7 @@ fun ChatBotScreen(
     var pendingConceptSelection by remember { mutableStateOf<String?>(null) }
     var showLogoutDialog by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
+    var hasPlayedOnce by remember { mutableStateOf(false) }
 
     val availableConcepts by chatViewModel.availableConcepts.collectAsState()
     val selectedConcept by chatViewModel.selectedConcept.collectAsState()
@@ -134,9 +135,12 @@ fun ChatBotScreen(
             ttsController.getDefaultVoiceName(currentLanguage, selectedAvatar)
         }
     }
-
+    LaunchedEffect(aiMessageOutput) {
+        hasPlayedOnce = false
+    }
     LaunchedEffect(ttsState.isSpeaking) {
         if (ttsState.isSpeaking) {
+            hasPlayedOnce = true
             val startTime = System.currentTimeMillis()
             while (ttsState.isSpeaking) {
                 currentAudioTime = (System.currentTimeMillis() - startTime) / 1000f
@@ -540,9 +544,17 @@ fun ChatBotScreen(
                                         )
                                     ) {
                                         Icon(
-                                            if (ttsState.isSpeaking) Icons.Default.Stop else Icons.Default.PlayArrow,
-                                            contentDescription = "Play Audio",
-                                            modifier = Modifier.size(28.dp)
+                                            imageVector = when {
+                                                ttsState.isSpeaking -> Icons.Default.Stop
+                                                hasPlayedOnce -> Icons.Default.Replay
+                                                else -> Icons.Default.PlayArrow
+                                            },
+                                            contentDescription = when {
+                                                ttsState.isSpeaking -> "Stop Audio"
+                                                hasPlayedOnce -> "Replay Audio"
+                                                else -> "Play Audio"
+                                            },
+                                            modifier = Modifier.size(25.dp)
                                         )
                                     }
                                 }
