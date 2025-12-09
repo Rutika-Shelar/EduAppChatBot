@@ -84,8 +84,9 @@ fun ChatBotScreen(
     val kannadaDisplayName = stringResource(R.string.option_kannada)
     val boyDisplayName = stringResource(R.string.boy)
     val girlDisplayName = stringResource(R.string.girl)
+    val disableAvatar =stringResource(R.string.disable)
 
-    var selectedAvatar by remember { mutableStateOf("boy") }
+    var selectedAvatar by remember { mutableStateOf("disable") }
 
     val chatHistoryListState = rememberLazyListState()
     val mainScreenListState = rememberLazyListState()
@@ -162,12 +163,16 @@ fun ChatBotScreen(
     // Initialize TTS settings when ready
     LaunchedEffect(ttsState.isInitialized, ttsState.voicesFullyLoaded) {
         if (ttsState.isInitialized && ttsState.voicesFullyLoaded && ttsState.availableVoices.isNotEmpty()) {
-            val savedAvatar =
-                ttsState.selectedCharacter.takeIf { it.isNotBlank() } ?: selectedAvatar
+            val savedAvatar = ttsState.selectedCharacter.takeIf {
+                it.isNotBlank() && it != "boy" && it != "girl"
+            } ?: "disable"
+
             selectedAvatar = savedAvatar
             ttsController.switchCharacter(savedAvatar)
-            ttsController.applyDefaultsForAvatarLanguage(savedAvatar, currentLanguage)
 
+            if (savedAvatar != "disable") {
+                ttsController.applyDefaultsForAvatarLanguage(savedAvatar, currentLanguage)
+            }
             selectedSpeed = when (ttsState.speechRate) {
                 in 0.0f..0.8f -> "0.75x"
                 in 0.8f..1.1f -> "1.0x"
@@ -347,24 +352,28 @@ fun ChatBotScreen(
                             Spacer(Modifier.height(8.dp))
                             DropDownMenuModel(
                                 label = stringResource(R.string.avatar),
-                                options = listOf(boyDisplayName, girlDisplayName),
+                                options = listOf(disableAvatar,boyDisplayName, girlDisplayName),
                                 selectedValue = when (selectedAvatar.lowercase()) {
-                                    "boy" -> boyDisplayName
+                                    "disable"-> disableAvatar
                                     "girl" -> girlDisplayName
-                                    else -> boyDisplayName
+                                    "boy" -> boyDisplayName
+                                    else -> disableAvatar
                                 },
                                 onValueSelected = { displayName ->
                                     val avatarCode = when (displayName) {
-                                        boyDisplayName -> "boy"
+                                        disableAvatar -> "disable"
                                         girlDisplayName -> "girl"
-                                        else -> "boy"
+                                        boyDisplayName -> "boy"
+                                        else -> disableAvatar
                                     }
                                     selectedAvatar = avatarCode
                                     ttsController.switchCharacter(avatarCode)
-                                    ttsController.applyDefaultsForAvatarLanguage(
-                                        avatarCode,
-                                        currentLanguage
-                                    )
+
+                                    if (avatarCode != "disable") {
+                                        ttsController.applyDefaultsForAvatarLanguage(avatarCode, currentLanguage)
+                                    } else {
+                                        if (ttsState.isSpeaking) ttsController.stop()
+                                    }
                                 }
                             )
                             Spacer(Modifier.height(12.dp))
@@ -462,28 +471,29 @@ fun ChatBotScreen(
                         Column(
                             modifier = Modifier.padding(12.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(170.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Card(
-                                    elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
+                            if(selectedAvatar !="disable") {
+                                Box(
                                     modifier = Modifier
-                                        .width(120.dp)
-                                        .height(160.dp)
+                                        .fillMaxWidth()
+                                        .height(170.dp),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    AndroidView(factory = {
-                                        WebView(context).apply {
-                                            ttsController.setupWebView(this)
-                                        }
-                                    })
+                                    Card(
+                                        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
+                                        modifier = Modifier
+                                            .width(120.dp)
+                                            .height(160.dp)
+                                    ) {
+                                        AndroidView(factory = {
+                                            WebView(context).apply {
+                                                ttsController.setupWebView(this)
+                                            }
+                                        })
+                                    }
                                 }
+
+                                Spacer(modifier = Modifier.height(20.dp))
                             }
-
-                            Spacer(modifier = Modifier.height(20.dp))
-
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()

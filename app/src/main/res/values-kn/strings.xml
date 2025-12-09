@@ -107,4 +107,5 @@
     <string name="start_new">ಹೊಸದನ್ನು ಪ್ರಾರಂಭಿಸಿ</string>
     <string name="logout">ನಿರ್ಗಮನ</string>
     <string name="logout_confirmation">ನೀವು ನಿಜವಾಗಿಯೂ ನಿರ್ಗಮಿಸಲು ಬಯಸುತ್ತೀರಾ?</string>
+    <string name="disable">ನಿಷ್ಕ್ರಿಯಗೊಳಿಸು</string>
 </resources>

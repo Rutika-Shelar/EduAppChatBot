@@ -106,4 +106,5 @@
     <string name="start_new">Start New</string>
     <string name="logout">Logout</string>
     <string name="logout_confirmation">Are you sure you want to logout?</string>
+    <string name="disable">disable</string>
 </resources>
