@@ -49,53 +49,68 @@ import kotlinx.coroutines.delay
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatBotScreen(
-    chatViewModel: ChatViewModel,
-    ttsController: TextToSpeech = viewModel(),
-    sttController: SpeechToText = viewModel(),
+    chatViewModel: ChatViewModel,//chat ViewModel
+    ttsController: TextToSpeech = viewModel(),// TextToSpeech core Util
+    sttController: SpeechToText = viewModel(),// SpeechToText core Util
 ) {
     val context = LocalContext.current
 
-    val ttsState by ttsController.state.collectAsState()
-    val sttState by sttController.state.collectAsState()
+    val ttsState by ttsController.state.collectAsState()// TTS states
+    val sttState by sttController.state.collectAsState()// STT states
 
+    // track current audio playback time
     var currentAudioTime by remember { mutableFloatStateOf(0f) }
+
+    // Collects chat state from ChatViewModel
     val chatMessages by chatViewModel.messages.collectAsState()
     val isChatLoading by chatViewModel.isLoading.collectAsState()
-    val conceptMapJSON by chatViewModel.conceptMapJSON.collectAsState()
+
+    // Add after existing state collectors
     val typingText by chatViewModel.typingText.collectAsState()
     val isTyping by chatViewModel.isTyping.collectAsState()
     val shouldStartTTS by chatViewModel.shouldStartTTS.collectAsState()
+
+    // Network connectivity state
+    val isNetworkConnected by chatViewModel.isConnected.collectAsState()
+
+    // Concept map JSON state
+    val conceptMapJSON by chatViewModel.conceptMapJSON.collectAsState()
     val conceptMapAvailable = remember(conceptMapJSON) {
         ConceptMapUtils.hasConceptMapContent(conceptMapJSON)
     }
 
+    // User session repository
     val userRepository = remember { UserSessionRepository(context.applicationContext) }
     val currentLanguage by chatViewModel.currentLanguage.collectAsState()
 
+    // Agent metadata and state
     val agentMetadata by chatViewModel.agentMetadata.collectAsState()
-    val isNetworkConnected by chatViewModel.isConnected.collectAsState()
     val imageUrl = agentMetadata?.imageUrl?.takeIf { it.isNotBlank() && it != "null" }
     val videoUrl = agentMetadata?.videoUrl?.takeIf { it.isNotBlank() && it != "null" }
     val agentState by chatViewModel.agentState.collectAsState()
 
+    // Settings menu state
     var showSettingsMenu by remember { mutableStateOf(false) }
-    var selectedLanguage by remember { mutableStateOf(currentLanguage) }
-
     val englishDisplayName = stringResource(R.string.option_english)
     val kannadaDisplayName = stringResource(R.string.option_kannada)
     val boyDisplayName = stringResource(R.string.boy)
     val girlDisplayName = stringResource(R.string.girl)
     val disableAvatar =stringResource(R.string.disable)
 
+    // Language selection state
+    var selectedLanguage by remember { mutableStateOf(currentLanguage) }
     var selectedAvatar by remember { mutableStateOf("disable") }
+    var selectedSpeed by remember { mutableStateOf("0.75x") }
 
+    // scroll state for chat history messages and main screen
     val chatHistoryListState = rememberLazyListState()
     val mainScreenListState = rememberLazyListState()
 
     var messageInput by remember { mutableStateOf("") }
-    var selectedSpeed by remember { mutableStateOf("0.75x") }
 
     val translatedOutput by chatViewModel.translatedOutput.collectAsState()
+
+    // Starting message
     val startMessage = stringResource(R.string.start_msg)
 
     val aiMessageOutput = remember(isTyping, typingText, translatedOutput) {
@@ -105,17 +120,26 @@ fun ChatBotScreen(
             else -> startMessage
         }
     }
-
+    // Dialog states
     var showSessionResumeDialog by remember { mutableStateOf(false) }
-    var pendingConceptSelection by remember { mutableStateOf<String?>(null) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+
+    // Concept selection pending state
+    var pendingConceptSelection by remember { mutableStateOf<String?>(null) }
+
+    // Keyboard controller
     val keyboardController = LocalSoftwareKeyboardController.current
+    // Audio playback tracking
     var hasPlayedOnce by remember { mutableStateOf(false) }
 
+    // Collect available concepts and selected concept from ViewModel
     val availableConcepts by chatViewModel.availableConcepts.collectAsState()
     val selectedConcept by chatViewModel.selectedConcept.collectAsState()
+
+    // display concept map only for this nodes
     val visualNodes = remember { setOf("CI", "GE") }
 
+    // Determine if any visual content is available to display
     val hasAnyVisualContent = remember(conceptMapAvailable, agentState, imageUrl, videoUrl) {
         val hasRelevantNode = visualNodes.any { it.equals(agentState, ignoreCase = true) }
         val showConceptMap = hasRelevantNode && conceptMapAvailable
@@ -288,11 +312,31 @@ fun ChatBotScreen(
                                 .padding(12.dp)
                                 .widthIn(min = 220.dp, max = 320.dp)
                         ) {
-                            Text(
-                                stringResource(R.string.settings),
-                                color = Black,
-                                style = MaterialTheme.typography.titleSmall
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.settings),
+                                    color = TextPrimary,
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+
+                                IconButton(
+                                    onClick = { showSettingsMenu = false },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Close Settings",
+                                        tint = IconPrimary
+                                    )
+                                }
+                            }
+
                             Spacer(Modifier.height(8.dp))
                             DropDownMenuModel(
                                 label = stringResource(R.string.select_language),
@@ -352,7 +396,7 @@ fun ChatBotScreen(
                             Spacer(Modifier.height(12.dp))
                             Text(
                                 stringResource(R.string.select_avatar),
-                                color = Black,
+                                color = TextPrimary,
                                 style = MaterialTheme.typography.titleSmall
                             )
                             Spacer(Modifier.height(8.dp))
@@ -385,7 +429,7 @@ fun ChatBotScreen(
                             Spacer(Modifier.height(12.dp))
                             Text(
                                 stringResource(R.string.select_voice),
-                                color = Black,
+                                color = TextPrimary,
                                 style = MaterialTheme.typography.titleSmall
                             )
                             Spacer(Modifier.height(8.dp))
@@ -411,7 +455,7 @@ fun ChatBotScreen(
                             Spacer(Modifier.height(12.dp))
                             Text(
                                 stringResource(R.string.select_speed),
-                                color = Black,
+                                color = TextPrimary,
                                 style = MaterialTheme.typography.titleSmall
                             )
                             Spacer(Modifier.height(8.dp))
