@@ -17,3 +17,7 @@ app/src/main/res/values/keys.xml
 .ideaapp/build/outputs/apk/release/
 app/build/outputs/apk/debug/
 *.apk
+*.aab
+*.ap_
+*.dex
+*.class

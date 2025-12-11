@@ -38,20 +38,20 @@ fun MainScreen() {
         if (userRepo.isUserInfoComplete()) "chatBot" else "userInfo"
     }
 
-    val apiBaseUrl = remember { BuildConfig.API_BASE_URL  }
-    val geminiApiKey = remember {  BuildConfig.GEMINI_API_KEY }
+    val agenticAIBaseUrl = remember { BuildConfig.AGENTIC_AI_BASE_URL  }
+    val llmApiKey = remember {  BuildConfig.GROQ_API_KEY }
 
-    val geminiUserClass = remember { "6" }
-    val geminiNodeNumber = remember { "8" }
-    val geminiMaxWord = remember { "250" }
+    val llmUserClass = remember { "6" }
+    val llmNodeNumber = remember { "8" }
+    val llmMaxWord = remember { "250" }
 
     val chatViewModelFactory = remember {
         ChatViewModelFactory(
-            apiBaseUrl = apiBaseUrl,
-            geminiApiKey = geminiApiKey,
-            geminiUserClass = geminiUserClass,
-            geminiNodeNumber = geminiNodeNumber,
-            geminiMaxWord = geminiMaxWord
+            agenticAIBaseUrl = agenticAIBaseUrl,
+            llmApiKey = llmApiKey,
+            llmUserClass = llmUserClass,
+            llmNodeNumber = llmNodeNumber,
+            llmMaxWord = llmMaxWord
         )
     }
     NavHost(navController = navController, startDestination = startDestination) {

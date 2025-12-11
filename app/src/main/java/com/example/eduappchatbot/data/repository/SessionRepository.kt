@@ -50,10 +50,10 @@ class SessionRepository(private val context: Context) {
             if (!json.has(concept)) return null
             val obj = json.getJSONObject(concept)
             val thread = obj.optString("thread", "") ?: return null
-            val session = obj.optString("session", null)
+            val session = obj.optString("session", "")?: return null
             // cache in-memory
             conceptThreadMap[concept] = thread
-            if (!session.isNullOrBlank()) conceptSessionMap[concept] = session
+            if (session.isNotBlank()) conceptSessionMap[concept] = session
             Pair(thread, session.takeIf { it.isNotBlank() })
         } catch (e: Exception) {
             DebugLogger.errorLog("SessionRepository", "loadMapping failed: ${e.message}")

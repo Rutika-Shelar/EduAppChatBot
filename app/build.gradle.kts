@@ -28,8 +28,9 @@ android {
         }
 
         fun prop(name: String, default: String = ""): String = localProps.getProperty(name, default)
-        buildConfigField("String", "API_BASE_URL", "\"${prop("API_BASE_URL")}\"")
+        buildConfigField("String", "AGENTIC_AI_BASE_URL", "\"${prop("AGENTIC_AI_BASE_URL")}\"")
         buildConfigField("String", "GEMINI_API_KEY", "\"${prop("GEMINI_API_KEY")}\"")
+        buildConfigField("String", "GROQ_API_KEY", "\"${prop("GROQ_API_KEY")}\"")
     }
 
     buildTypes {

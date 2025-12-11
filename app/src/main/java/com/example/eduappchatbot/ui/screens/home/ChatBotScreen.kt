@@ -39,7 +39,6 @@ import com.example.eduappchatbot.core.chatBot.ChatViewModel
 import com.example.eduappchatbot.data.repository.UserSessionRepository
 import com.example.eduappchatbot.ui.components.*
 import com.example.eduappchatbot.ui.theme.*
-import com.example.eduappchatbot.utils.ConceptMapUtils
 import com.example.eduappchatbot.utils.DebugLogger
 import com.example.eduappchatbot.utils.LanguageChangeHelper
 import com.example.eduappchatbot.viewModels.speechModels.SpeechToText
@@ -75,9 +74,7 @@ fun ChatBotScreen(
 
     // Concept map JSON state
     val conceptMapJSON by chatViewModel.conceptMapJSON.collectAsState()
-    val conceptMapAvailable = remember(conceptMapJSON) {
-        ConceptMapUtils.hasConceptMapContent(conceptMapJSON)
-    }
+
 
     // User session repository
     val userRepository = remember { UserSessionRepository(context.applicationContext) }
@@ -140,9 +137,9 @@ fun ChatBotScreen(
     val visualNodes = remember { setOf("CI", "GE") }
 
     // Determine if any visual content is available to display
-    val hasAnyVisualContent = remember(conceptMapAvailable, agentState, imageUrl, videoUrl) {
-        val hasRelevantNode = visualNodes.any { it.equals(agentState, ignoreCase = true) }
-        val showConceptMap = hasRelevantNode && conceptMapAvailable
+    val hasAnyVisualContent = remember(agentState, conceptMapJSON, imageUrl, videoUrl) {
+        val hasRelevantState = visualNodes.any { it.equals(agentState, ignoreCase = true) }
+        val showConceptMap = hasRelevantState && conceptMapJSON.isNotBlank()
         val hasImage = imageUrl != null
         val hasVideo = videoUrl != null
         showConceptMap || hasImage || hasVideo
@@ -779,7 +776,6 @@ fun ChatBotScreen(
                     ) {
                         SwitchableConceptView(
                             json = conceptMapJSON,
-                            agentState = agentState,
                             currentAudioTime = currentAudioTime,
                             isAudioPlaying = ttsState.isSpeaking,
                             imageUrl = imageUrl,

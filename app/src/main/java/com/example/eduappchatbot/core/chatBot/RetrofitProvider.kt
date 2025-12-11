@@ -10,11 +10,11 @@ import java.util.concurrent.TimeUnit
 import com.google.gson.GsonBuilder
 
 object RetrofitProvider {
-    fun buildRetrofit(apiBaseUrl: String): Retrofit {
-        val buildConfigUrl = BuildConfig.API_BASE_URL.trim()
-        val base = buildConfigUrl.ifEmpty { apiBaseUrl.trim() }
+    fun buildRetrofit(agenticAIBaseUrl: String): Retrofit {
+        val buildConfigUrl = BuildConfig.AGENTIC_AI_BASE_URL.trim()
+        val base = buildConfigUrl.ifEmpty { agenticAIBaseUrl.trim() }
         val normalized = base.trimEnd('/').ifEmpty {
-            DebugLogger.errorLog("RetrofitProvider", "API base URL is empty. Set BuildConfig.API_BASE_URL or provide apiBaseUrl.")
+            DebugLogger.errorLog("RetrofitProvider", "API base URL is empty. Set BuildConfig.AGENTIC_AI_BASE_URL or provide agenticAIBaseUrl.")
             throw IllegalArgumentException("API base URL required")
         } + "/"
 

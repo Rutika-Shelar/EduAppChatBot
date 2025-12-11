@@ -10,7 +10,7 @@ import retrofit2.Response
 import java.io.IOException
 
 class AgenticAIClient(
-    apiBaseUrl: String
+    agenticAIBaseUrl: String
 ) {
     val service: AgenticAIService
 
@@ -21,7 +21,7 @@ class AgenticAIClient(
     val currentSessionId: StateFlow<String?> = _currentSessionId
 
     init {
-        val retrofit = RetrofitProvider.buildRetrofit(apiBaseUrl)
+        val retrofit = RetrofitProvider.buildRetrofit(agenticAIBaseUrl)
         service = retrofit.create(AgenticAIService::class.java)
     }
 

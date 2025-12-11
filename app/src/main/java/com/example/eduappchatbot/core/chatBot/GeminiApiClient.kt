@@ -109,9 +109,9 @@ class GeminiLLMClient(
             val jsonBody = JSONObject().apply {
                 put("contents", contents)
                 put("generationConfig", JSONObject().apply {
-                    put("temperature", 0.7)
-                    put("maxOutputTokens", 8192)
-                    put("topP", 0.95)
+                put("temperature", 0.7)
+                put("maxOutputTokens", 8192)
+                put("topP", 0.95)
                 })
             }
 
@@ -143,7 +143,7 @@ class GeminiLLMClient(
             val responseBody = response.body?.string() ?: ""
             response.close()
 
-            DebugLogger.debugLog("GeminiLLMClient", "Response body received")
+            DebugLogger.debugLog("GeminiLLMClient", "Response body: $responseBody")
             return@withContext responseBody
 
         } catch (e: Exception) {
@@ -235,8 +235,11 @@ class GeminiLLMClient(
                                     testObj.has("nodes") &&
                                     testObj.has("edges")) {
 
+                                    DebugLogger.debugLog("GeminiLLMClient", "Successfully extracted concept map JSON")
+
                                     // Post-process: Add edge IDs if missing
                                     val processedJson = addEdgeIdsIfMissing(candidateJson)
+
                                     return processedJson
                                 }
                             } catch (e: Exception) {
@@ -272,6 +275,7 @@ class GeminiLLMClient(
             for (i in 0 until edges.length()) {
                 val edge = edges.getJSONObject(i)
 
+                // Add ID if missing
                 if (!edge.has("id") || edge.getString("id").isBlank()) {
                     val from = edge.getString("from")
                     val to = edge.getString("to")

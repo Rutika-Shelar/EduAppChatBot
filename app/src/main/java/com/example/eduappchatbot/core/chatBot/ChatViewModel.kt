@@ -24,78 +24,98 @@ import com.example.eduappchatbot.utils.TranslationHelper
 import androidx.core.content.edit
 
 class ChatViewModel(
-    apiBaseUrl: String,
-    geminiApiKey: String = "",
-    geminiUserClass: String = "6",
-    geminiNodeNumber: String = "8",//change this
-    geminiMaxWord: String = "250"
+    agenticAIBaseUrl: String,
+    llmApiKey: String = "",
+    llmUserClass: String = "6",
+    llmNodeNumber: String = "8",//change this
+    llmMaxWord: String = "250"
 ) : ViewModel() {
 
-    private val llmClient = AgenticAIClient(apiBaseUrl)
-    private val geminiClient = GeminiLLMClient(geminiApiKey, geminiUserClass, geminiNodeNumber, geminiMaxWord)
+    private val agenticAIClient = AgenticAIClient(agenticAIBaseUrl)
+    //private val geminiClient = GeminiLLMClient(geminiApiKey, geminiUserClass, geminiNodeNumber, geminiMaxWord)
+    private val llmClient = LLMClient(llmApiKey,llmUserClass, llmNodeNumber, llmMaxWord)
 
+    private val ValidConceptMapStates= setOf("CI", "GE")
+    // Maps to store thread and session IDs for concepts
     private val conceptThreadMap = mutableMapOf<String, String>()
     private val conceptSessionMap = mutableMapOf<String, String>()
+    private val conceptRepository = ConceptRepository(agenticAIClient.service)
 
-    private val conceptRepository = ConceptRepository(llmClient.service)
-
+    // Chat messages
     private val _messages = MutableStateFlow<List<ChatMessageModel>>(emptyList())
     val messages: StateFlow<List<ChatMessageModel>> = _messages
 
+    // Loading state
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
 
+    // Typing animation state
     private val _typingText = MutableStateFlow("")
     val typingText: StateFlow<String> = _typingText
 
     private val _isTyping = MutableStateFlow(false)
     val isTyping: StateFlow<Boolean> = _isTyping
 
+    // Concept map with progressive drawing
     private val _conceptMapJSON = MutableStateFlow(
         """{"visualization_type":"None","main_concept":"Chat for a Concept Map","nodes":[],"edges":[]}"""
     )
     val conceptMapJSON: StateFlow<String> = _conceptMapJSON
 
+    // TTS trigger
     private val _shouldStartTTS = MutableStateFlow(false)
     val shouldStartTTS: StateFlow<Boolean> = _shouldStartTTS
 
     private val _fullTextForTTS = MutableStateFlow("")
     val fullTextForTTS: StateFlow<String> = _fullTextForTTS
 
+    // Last user message for when the send msg failed
     private val _lastUserMessage = MutableStateFlow("")
     val lastUserMessage: StateFlow<String> = _lastUserMessage
 
+    // Agent state and metadata
     private val _agentState = MutableStateFlow("")
     val agentState: StateFlow<String> = _agentState
 
     private val _agentMetadata = MutableStateFlow<SessionMetadata?>(null)
     val agentMetadata: StateFlow<SessionMetadata?> = _agentMetadata
 
+    // Translated output for display
     private val _translatedOutput = MutableStateFlow("")
     val translatedOutput: StateFlow<String> = _translatedOutput
 
+    // Network connectivity state
     private val _isConnected = MutableStateFlow(true)
     val isConnected: StateFlow<Boolean> = _isConnected
 
+    // Available concepts
     private val _availableConcepts = MutableStateFlow<List<String>>(emptyList())
     val availableConcepts: StateFlow<List<String>> = _availableConcepts
 
+    // Currently selected concept
     private val _selectedConcept = MutableStateFlow<String?>(null)
     val selectedConcept: StateFlow<String?> = _selectedConcept
 
+    // Session started state
     private val _isSessionStarted = MutableStateFlow(false)
     val isSessionStarted: StateFlow<Boolean> = _isSessionStarted
 
+    // Pending first user message if session not ready
     private val _pendingFirstUserMessage = MutableStateFlow<String?>(null)
 
+    // Current language
     private val _currentLanguage = MutableStateFlow("en")
     val currentLanguage: StateFlow<String> = _currentLanguage
 
+    // User ID
     private val _userId = MutableStateFlow("")
     val userId: StateFlow<String> = _userId
 
+    // Jobs for animation control
     private var typingJob: Job? = null
     private var conceptMapJob: Job? = null
+
+    // Job for slow network detection
     private var slowNetworkJob: Job? = null
     private var connectivityObserverJob: Job? = null
 
@@ -230,11 +250,11 @@ class ChatViewModel(
     private suspend fun resumeExistingSession(context: Context, threadId: String, sessionId: String?) {
         DebugLogger.debugLog("ChatViewModel", "Resuming session - thread=$threadId")
 
-        llmClient.setCurrentThreadAndSession(threadId, sessionId)
+    agenticAIClient.setCurrentThreadAndSession(threadId, sessionId)
         _isSessionStarted.value = true
 
         try {
-            val histResult = llmClient.getSessionHistory(threadId)
+            val histResult = agenticAIClient.getSessionHistory(threadId)
             if (histResult.isSuccess) {
                 val history = histResult.getOrNull()
                 val messages = history?.messages ?: emptyList()
@@ -246,7 +266,7 @@ class ChatViewModel(
 
                 if (!lastAssistant.isNullOrBlank()) {
                     _fullTextForTTS.value = lastAssistant
-                    fetchConceptMapWithGemini(lastAssistant)
+                    fetchConceptMapWithLLM(lastAssistant)
                     startTypingAnimation(lastAssistant, context)
                 }
             }
@@ -274,7 +294,7 @@ class ChatViewModel(
             )
 
             val result = withTimeout(120_000L) {
-                llmClient.startSession(
+                agenticAIClient.startSession(
                     conceptTitle = originalConcept,
                     studentId = userName,//username as userid
                     isKannada = isKannada//boolean flag for kannada
@@ -292,7 +312,9 @@ class ChatViewModel(
                     val welcomeText = response.agentResponse.orEmpty()
                     if (welcomeText.isNotBlank()) {
                         _fullTextForTTS.value = welcomeText
-                        fetchConceptMapWithGemini(welcomeText)
+                        if (shouldGenerateConceptMap(response.currentState)) {
+                            fetchConceptMapWithLLM(welcomeText)
+                        }
                         startTypingAnimation(welcomeText, context)
                     }
                 } else {
@@ -350,7 +372,7 @@ class ChatViewModel(
             try {
                 val startNs = System.nanoTime()
                 val result = withTimeout(120_000L) {
-                    llmClient.continueSession(userMessage)
+                    agenticAIClient.continueSession(userMessage)
                 }
                 val elapsedMs = (System.nanoTime() - startNs) / 1_000_000L
 
@@ -382,7 +404,9 @@ class ChatViewModel(
                         }
 
                         _fullTextForTTS.value = text
-                        fetchConceptMapWithGemini(text)
+                        if (shouldGenerateConceptMap(resp.currentState)) {
+                            fetchConceptMapWithLLM(text)
+                        }
                         startTypingAnimation(text, context)
                     }
                 }
@@ -399,7 +423,23 @@ class ChatViewModel(
             }
         }
     }
+    /**
+     * Helper function to check if concept map should be generated
+     * Returns true only if agent state is CI or GE
+     */
+    private fun shouldGenerateConceptMap(agentState: String?): Boolean {
+        if (agentState.isNullOrBlank()) return false
+        val normalizedState = agentState.trim().uppercase()
+        val shouldGenerate = ValidConceptMapStates.contains(normalizedState)
 
+        if (shouldGenerate) {
+            DebugLogger.debugLog("ChatViewModel", "Agent state '$normalizedState' requires concept map - will generate")
+        } else {
+            DebugLogger.debugLog("ChatViewModel", "Agent state '$normalizedState' does not require concept map - skipping")
+        }
+
+        return shouldGenerate
+    }
     // Start the typing animation for AI response
     private fun startTypingAnimation(fullText: String, context: Context) {
         typingJob?.cancel()
@@ -445,11 +485,11 @@ class ChatViewModel(
         }
     }
 
-    private fun fetchConceptMapWithGemini(aiResponse: String) {
+    private fun fetchConceptMapWithLLM(aiResponse: String) {
         viewModelScope.launch {
             try {
-                val response = geminiClient.queryLLM(aiResponse, _currentLanguage.value)
-                val conceptMapJson = geminiClient.extractConceptMapJSON(response)
+                val response = llmClient.queryLLM(aiResponse, _currentLanguage.value)
+                val conceptMapJson = llmClient.extractConceptMapJSON(response)
                 startProgressiveConceptMap(conceptMapJson)
             } catch (e: Exception) {
                 DebugLogger.errorLog("ChatViewModel", "Gemini concept map error: ${e.message}")
@@ -459,6 +499,7 @@ class ChatViewModel(
 
     private fun startProgressiveConceptMap(conceptMapJson: String) {
         conceptMapJob?.cancel()
+        DebugLogger.debugLog("ChatViewModel","Starting progressive concept map with JSON: $conceptMapJson")
         conceptMapJob = viewModelScope.launch {
             try {
                 val jsonObj = JSONObject(conceptMapJson)
@@ -470,23 +511,30 @@ class ChatViewModel(
                     return@launch
                 }
 
+                // Start with empty concept map (but keep main_concept and audioSegments)
                 val progressiveNodes = JSONArray()
                 val progressiveEdges = JSONArray()
+
+                // Preserve audioSegments from original JSON
                 val audioSegments = jsonObj.optJSONArray("audioSegments") ?: JSONArray()
 
+                // Add nodes one by one with delay
                 for (i in 0 until nodesArray.length()) {
                     progressiveNodes.put(nodesArray.getJSONObject(i))
                     updateConceptMapState(jsonObj, progressiveNodes, JSONArray(), audioSegments)
                     delay(400L)
                 }
-
+                //Now add edges on by one
                 for (i in 0 until edgesArray.length()) {
                     progressiveEdges.put(edgesArray.getJSONObject(i))
                     updateConceptMapState(jsonObj, progressiveNodes, progressiveEdges, audioSegments)
+
+                    //Delay between edge additions
                     delay(300L)
                 }
             } catch (e: Exception) {
                 DebugLogger.errorLog("ChatViewModel", "Concept map animation error: ${e.message}")
+                // Fallback: show complete map
                 _conceptMapJSON.value = conceptMapJson
             }
         }
@@ -608,7 +656,7 @@ class ChatViewModel(
             }
 
             _isSessionStarted.value = false
-            llmClient.setCurrentThreadAndSession(null, null)
+            agenticAIClient.setCurrentThreadAndSession(null, null)
             _messages.value = emptyList()
 
             selectConcept(displayedConcept, context)
