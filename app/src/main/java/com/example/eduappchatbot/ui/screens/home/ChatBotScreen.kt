@@ -34,6 +34,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import com.example.eduappchatbot.R
 import com.example.eduappchatbot.core.chatBot.ChatViewModel
 import com.example.eduappchatbot.data.repository.UserSessionRepository
@@ -48,6 +49,7 @@ import kotlinx.coroutines.delay
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatBotScreen(
+    navController: NavController,
     chatViewModel: ChatViewModel,//chat ViewModel
     ttsController: TextToSpeech = viewModel(),// TextToSpeech core Util
     sttController: SpeechToText = viewModel(),// SpeechToText core Util
@@ -882,7 +884,15 @@ fun ChatBotScreen(
         message = stringResource(R.string.logout_confirmation),
         confirmText = stringResource(R.string.logout),
         onConfirm = {
+            sttController.stopListening()
+            ttsController.stop()
             showLogoutDialog = false
+            chatViewModel.stopNetworkObservation()
+
+            userRepository.clearUserInfo()
+            navController.navigate("userInfo") {
+                popUpTo("chatBot") { inclusive = true }
+            }
             // logout actions
         },
         onDismiss = {
