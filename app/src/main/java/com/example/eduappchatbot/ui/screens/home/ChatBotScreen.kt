@@ -100,7 +100,7 @@ fun ChatBotScreen(
     var selectedLanguage by remember { mutableStateOf(currentLanguage) }
     var selectedAvatar by remember { mutableStateOf("disable") }
     var selectedSpeed by remember { mutableStateOf("0.75x") }
-
+    var selectedModel by remember { mutableStateOf("") }
     // scroll state for chat history messages and main screen
     val chatHistoryListState = rememberLazyListState()
     val mainScreenListState = rememberLazyListState()
@@ -135,6 +135,9 @@ fun ChatBotScreen(
     val availableConcepts by chatViewModel.availableConcepts.collectAsState()
     val selectedConcept by chatViewModel.selectedConcept.collectAsState()
 
+    // Collect available models
+    val availableModels by chatViewModel.availableModels.collectAsState()
+
     // display concept map only for this nodes
     val visualNodes = remember { setOf("CI", "GE") }
 
@@ -160,6 +163,11 @@ fun ChatBotScreen(
     }
     LaunchedEffect(aiMessageOutput) {
         hasPlayedOnce = false
+    }
+    LaunchedEffect(availableModels) {
+        if (availableModels.isNotEmpty() && selectedModel.isEmpty()) {
+            selectedModel = availableModels.first()
+        }
     }
     LaunchedEffect(ttsState.isSpeaking) {
         if (ttsState.isSpeaking) {
@@ -479,6 +487,45 @@ fun ChatBotScreen(
                                     }
                                 }
                             )
+
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                text = "Select Model",
+                                color = TextPrimary,
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Spacer(Modifier.height(8.dp))
+
+                            if (availableModels.isEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        color = BrandPrimary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Text(
+                                    text = "Loading models...",
+                                    color = TextSecondary,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(start = 8.dp)
+                                )
+                            } else {
+                                DropDownMenuModel(
+                                    label = "AI Model",
+                                    options = availableModels,
+                                    selectedValue = selectedModel,
+                                    onValueSelected = { displayName ->
+                                        selectedModel = displayName
+                                        chatViewModel.setSelectedModel(displayName)
+                                        DebugLogger.debugLog("ChatBotScreen", "Model changed to: $displayName")
+                                    }
+                                )
+                            }
                         }
                     }
                 }

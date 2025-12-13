@@ -15,7 +15,8 @@ class GeminiLLMClient(
     private val apiKey: String,
     private val userClass: String,
     private val nodeNumber: String,
-    private val maxWord: String
+    private val maxWord: String,
+    private var model:String="gemma-3-27b-it"
 ) {
 
     private val client = OkHttpClient.Builder()
@@ -24,9 +25,19 @@ class GeminiLLMClient(
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    // Gemini API endpoint - using gemini-2.0-flash-lite
-    private val model = "gemini-2.0-flash-lite"
+    fun setModel(newModel: String) {
+        model = newModel
+        DebugLogger.debugLog("GeminiLLMClient", "Model updated to: $model")
+    }
 
+    /**
+     * Gets the currently selected model
+     */
+    fun getModel(): String = model
+
+    /**
+     * Constructs the Gemini API URL based on the selected model
+     */
     private fun getUrl(): String {
         return "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
     }

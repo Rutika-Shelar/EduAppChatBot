@@ -64,6 +64,7 @@ class AgenticAIClient(
                             is PersonasListResponse -> body.success
                             is TestImageResponse -> body.success
                             is TestSimulationResponse -> body.success
+                            is AvailableModelsResponse -> body.success
                             is HealthResponse -> true // No success field
                             else -> true
                         }
@@ -200,6 +201,9 @@ class AgenticAIClient(
         withContext(Dispatchers.IO) {
             callWithRetry { service.getAvailableConcepts() }
         }
+
+    suspend fun getAvailableModels(): Result<AvailableModelsResponse> =
+        withContext(Dispatchers.IO) { callWithRetry { service.getAvailableModels() } }
 
     suspend fun getPersonas(): Result<PersonasListResponse> =
         withContext(Dispatchers.IO) {

@@ -25,6 +25,7 @@ import androidx.core.content.edit
 
 class ChatViewModel(
     agenticAIBaseUrl: String,
+    geminiApiKey:String,
     llmApiKey: String = "",
     llmUserClass: String = "6",
     llmNodeNumber: String = "8",//change this
@@ -32,10 +33,12 @@ class ChatViewModel(
 ) : ViewModel() {
 
     private val agenticAIClient = AgenticAIClient(agenticAIBaseUrl)
-    //private val geminiClient = GeminiLLMClient(geminiApiKey, geminiUserClass, geminiNodeNumber, geminiMaxWord)
-    private val llmClient = LLMClient(llmApiKey,llmUserClass, llmNodeNumber, llmMaxWord)
+    private val model="meta-llama/llama-4-scout-17b-16e-instruct"
 
-    private val ValidConceptMapStates= setOf("CI", "GE")
+    private val geminiClient = GeminiLLMClient(geminiApiKey, llmUserClass, llmNodeNumber, llmMaxWord,model)
+    private val llmClient = LLMClient(llmApiKey,llmUserClass, llmNodeNumber, llmMaxWord,model)
+
+    private val validConceptMapStates= setOf("CI", "GE")
     // Maps to store thread and session IDs for concepts
     private val conceptThreadMap = mutableMapOf<String, String>()
     private val conceptSessionMap = mutableMapOf<String, String>()
@@ -91,6 +94,14 @@ class ChatViewModel(
     // Available concepts
     private val _availableConcepts = MutableStateFlow<List<String>>(emptyList())
     val availableConcepts: StateFlow<List<String>> = _availableConcepts
+
+    private val _availableModels = MutableStateFlow<List<String>>(emptyList())
+    val availableModels: StateFlow<List<String>> = _availableModels
+
+    private val _selectedModel = MutableStateFlow("")
+    val selectedModel: StateFlow<String> = _selectedModel
+
+    private val groqModels = listOf("meta-llama/llama-4-scout-17b-16e-instruct")
 
     // Currently selected concept
     private val _selectedConcept = MutableStateFlow<String?>(null)
@@ -150,10 +161,9 @@ class ChatViewModel(
             initializeUserSession(context)
             startNetworkObservation(context)
 
-            val language = _currentLanguage.value
-            refreshAvailableConcepts(context, language)
+            refreshAvailableModels()
+            refreshAvailableConcepts(context, _currentLanguage.value)
             autoStartSavedConcept(context)
-
             DebugLogger.debugLog("ChatViewModel", "Initialization complete")
         }
     }
@@ -429,17 +439,26 @@ class ChatViewModel(
      */
     private fun shouldGenerateConceptMap(agentState: String?): Boolean {
         if (agentState.isNullOrBlank()) return false
-        val normalizedState = agentState.trim().uppercase()
-        val shouldGenerate = ValidConceptMapStates.contains(normalizedState)
+        val shouldGenerate = validConceptMapStates.contains(agentState)
 
         if (shouldGenerate) {
-            DebugLogger.debugLog("ChatViewModel", "Agent state '$normalizedState' requires concept map - will generate")
+            DebugLogger.debugLog("ChatViewModel", "Agent state '$agentState' requires concept map - will generate")
         } else {
-            DebugLogger.debugLog("ChatViewModel", "Agent state '$normalizedState' does not require concept map - skipping")
+            DebugLogger.debugLog("ChatViewModel", "Agent state '$agentState' does not require concept map - skipping")
         }
 
         return shouldGenerate
     }
+
+    fun setSelectedModel(modelId: String) {
+        _selectedModel.value = modelId
+        DebugLogger.debugLog("ChatViewModel", "Model updated to: $modelId")
+        // Update both clients
+        geminiClient.setModel(modelId)
+        llmClient.setModel(modelId)
+    }
+
+
     // Start the typing animation for AI response
     private fun startTypingAnimation(fullText: String, context: Context) {
         typingJob?.cancel()
@@ -485,17 +504,34 @@ class ChatViewModel(
         }
     }
 
+    private fun isGroqModel(modelId: String): Boolean {
+        return groqModels.any { it.equals(modelId, ignoreCase = true) }
+    }
+
     private fun fetchConceptMapWithLLM(aiResponse: String) {
         viewModelScope.launch {
             try {
-                val response = llmClient.queryLLM(aiResponse, _currentLanguage.value)
-                val conceptMapJson = llmClient.extractConceptMapJSON(response)
-                startProgressiveConceptMap(conceptMapJson)
+                val currentModel = _selectedModel.value
+
+                if (isGroqModel(currentModel)) {
+                    // Use LLMClient (Groq)
+                    DebugLogger.debugLog("ChatViewModel", "Using Groq client for model: $currentModel")
+                    val response = llmClient.queryLLM(aiResponse, _currentLanguage.value)
+                    val conceptMapJson = llmClient.extractConceptMapJSON(response)
+                    startProgressiveConceptMap(conceptMapJson)
+                } else {
+                    // Use GeminiLLMClient
+                    DebugLogger.debugLog("ChatViewModel", "Using Gemini client for model: $currentModel")
+                    val response = geminiClient.queryLLM(aiResponse, _currentLanguage.value)
+                    val conceptMapJson = geminiClient.extractConceptMapJSON(response)
+                    startProgressiveConceptMap(conceptMapJson)
+                }
             } catch (e: Exception) {
-                DebugLogger.errorLog("ChatViewModel", "Gemini concept map error: ${e.message}")
+                DebugLogger.errorLog("ChatViewModel", "Concept map error: ${e.message}")
             }
         }
     }
+
 
     private fun startProgressiveConceptMap(conceptMapJson: String) {
         conceptMapJob?.cancel()
@@ -571,6 +607,56 @@ class ChatViewModel(
                 }
             } catch (e: Exception) {
                 DebugLogger.errorLog("ChatViewModel", "refreshAvailableConcepts failed: ${e.message}")
+            }
+        }
+    }
+
+    private fun refreshAvailableModels() {
+        viewModelScope.launch {
+            try {
+                // Fetch AgenticAI models
+                val agenticResult = agenticAIClient.getAvailableModels()
+                val googleModels = if (agenticResult.isSuccess) {
+
+                    val response = agenticResult.getOrNull()
+                    DebugLogger.debugLog("ChatViewModel", "API Response: $response")
+                    DebugLogger.debugLog("ChatViewModel", "Response success: ${response?.success}")
+                    DebugLogger.debugLog("ChatViewModel", "Response total: ${response?.total}")
+                    DebugLogger.debugLog("ChatViewModel", "Response models: ${response?.availableModels}")
+
+                    val models = response?.availableModels ?: emptyList()
+                    DebugLogger.debugLog("ChatViewModel", "✓ Fetched ${models.size} models from API")
+                    models.forEach { model ->
+                        DebugLogger.debugLog("ChatViewModel", "  - $model")
+                    }
+                    models
+                } else {
+                    val error = agenticResult.exceptionOrNull()?.message ?: "Unknown error"
+                    DebugLogger.errorLog("ChatViewModel", "✗ Failed to fetch models: $error")
+                    emptyList()                }
+                // Merge
+                val mergedModels = (googleModels + groqModels).distinct()
+
+                _availableModels.value = mergedModels
+
+                // Set default model if none selected
+                if (_selectedModel.value.isEmpty() && mergedModels.isNotEmpty()) {
+                    _selectedModel.value = mergedModels.first()
+                }
+
+                DebugLogger.debugLog(
+                    "ChatViewModel",
+                    "Models loaded: ${mergedModels.size} total (${googleModels.size} Google + ${groqModels.size} Groq)"
+                )
+            } catch (e: Exception) {
+                DebugLogger.errorLog("ChatViewModel", "refreshAvailableModels failed: ${e.message}")
+
+                // Fallback to Groq only
+                val fallbackModel = "meta-llama/llama-4-scout-17b-16e-instruct"
+                _availableModels.value = listOf(fallbackModel)
+                if (_selectedModel.value.isEmpty()) {
+                    _selectedModel.value = fallbackModel
+                }
             }
         }
     }

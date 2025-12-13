@@ -27,6 +27,8 @@ interface AgenticAIService {
     @GET("/concepts")
     suspend fun getAvailableConcepts(): Response<ConceptsListResponse>
 
+    @GET("/available-models")
+    suspend fun getAvailableModels():Response<AvailableModelsResponse>
     //Utility Endpoints
     @GET("/personas")
     suspend fun getPersonas(): Response<PersonasListResponse>
@@ -126,6 +128,13 @@ data class ConceptsListResponse(
     val success: Boolean = true,
     val concepts: List<String> = emptyList(),
     val total: Int = 0,
+    val message: String? = null
+)
+data class AvailableModelsResponse(
+    val success: Boolean = true,
+    @SerializedName("models") val availableModels: List<String> = emptyList(),
+    val total : Int = 0,
+    val default_model : String ?=null,
     val message: String? = null
 )
 

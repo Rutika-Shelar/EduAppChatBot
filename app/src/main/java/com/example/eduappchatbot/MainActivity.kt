@@ -39,6 +39,7 @@ fun MainScreen() {
     }
 
     val agenticAIBaseUrl = remember { BuildConfig.AGENTIC_AI_BASE_URL  }
+    val geminiApiKey = remember { BuildConfig.GEMINI_API_KEY }
     val llmApiKey = remember {  BuildConfig.GROQ_API_KEY }
 
     val llmUserClass = remember { "6" }
@@ -48,6 +49,7 @@ fun MainScreen() {
     val chatViewModelFactory = remember {
         ChatViewModelFactory(
             agenticAIBaseUrl = agenticAIBaseUrl,
+            geminiApiKey=geminiApiKey,
             llmApiKey = llmApiKey,
             llmUserClass = llmUserClass,
             llmNodeNumber = llmNodeNumber,
@@ -69,8 +71,6 @@ fun MainScreen() {
         }
         composable("chatBot") {
             val chatViewModel: ChatViewModel = viewModel(factory = chatViewModelFactory)
-            ChatBotScreen(  chatViewModel = chatViewModel
-            )
-        }
+            ChatBotScreen(  chatViewModel = chatViewModel, navController = navController)   }
     }
 }
