@@ -30,6 +30,7 @@ fun ScrollingSubtitle(
     val ttsState by ttsController.state.collectAsState()
     val isSpeaking = ttsState.isSpeaking
 
+    // Use the text parameter directly - it will be the translated version
     val (cleanText, words, boldRanges) = remember(text) {
         extractWordsAndBold(text)
     }
@@ -108,7 +109,6 @@ fun ScrollingSubtitle(
         )
     }
 }
-
 @Immutable
 data class WordRange(val start: Int, val end: Int)
 

@@ -376,7 +376,7 @@ fun ChatBotScreen(
                                         )
                                     }
 
-                                    chatViewModel.setCurrentLanguage(shortCode)
+                                    chatViewModel.setCurrentLanguage(shortCode, context)
                                     chatViewModel.refreshAvailableConcepts(
                                         context,
                                         shortCode

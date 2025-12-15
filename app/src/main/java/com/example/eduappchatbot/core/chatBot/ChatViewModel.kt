@@ -22,6 +22,7 @@ import com.example.eduappchatbot.data.repository.SessionRepository
 import com.example.eduappchatbot.data.repository.UserSessionRepository
 import com.example.eduappchatbot.utils.TranslationHelper
 import androidx.core.content.edit
+import kotlin.collections.plusAssign
 
 class ChatViewModel(
     agenticAIBaseUrl: String,
@@ -118,6 +119,11 @@ class ChatViewModel(
     private val _currentLanguage = MutableStateFlow("en")
     val currentLanguage: StateFlow<String> = _currentLanguage
 
+    private val _originalAIResponse = MutableStateFlow("") // Store original API response
+    val originalAIResponse: StateFlow<String> = _originalAIResponse
+
+    private val _translationCache = MutableStateFlow<Map<String, String>>(emptyMap())
+
     // User ID
     private val _userId = MutableStateFlow("")
     val userId: StateFlow<String> = _userId
@@ -167,6 +173,59 @@ class ChatViewModel(
             DebugLogger.debugLog("ChatViewModel", "Initialization complete")
         }
     }
+
+    private suspend fun getOrTranslateText(text: String, context: Context): String {
+        val targetLang = _currentLanguage.value
+        val cacheKey = "${targetLang}_${text.hashCode()}"
+
+        // Check cache first
+        _translationCache.value[cacheKey]?.let {
+            return it
+        }
+
+        return withContext(Dispatchers.IO) {
+            try {
+                val srcDetected = detectSourceLanguage(text)
+
+                DebugLogger.debugLog(
+                    "ChatViewModel",
+                    "Translation DETECTION -> source: $srcDetected, target: $targetLang"
+                )
+
+                val result = when {
+                    srcDetected == "en" && targetLang == "en" -> text
+                    srcDetected == "kn" && targetLang == "kn" -> {
+                        val translated = try {
+                            TranslationHelper.translateText(text, "en", targetLang)
+                        } catch (e: Exception) {
+                            DebugLogger.errorLog("ChatViewModel", "Forced en->kn translation failed: ${e.message}")
+                            null
+                        }
+                        translated?.takeIf { it.isNotBlank() } ?: text
+                    }
+                    else -> {
+                        val translated = try {
+                            TranslationHelper.translateText(text, srcDetected, targetLang)
+                        } catch (e: Exception) {
+                            DebugLogger.errorLog("TranslationHelper", "TranslationHelper failed: ${e.message}")
+                            text
+                        }
+                        translated.ifBlank { text }
+                    }
+                }
+
+                // Cache the result
+                _translationCache.value = _translationCache.value + (cacheKey to result)
+
+                DebugLogger.debugLog("ChatViewModel", "Post-translation (full): ${result.take(2000)}")
+                result
+            } catch (e: Exception) {
+                DebugLogger.errorLog("ChatViewModel", "Translation error: ${e.message}")
+                text
+            }
+        }
+    }
+
 // Save the thread and session mapping for a concept
     private fun saveThreadMapping(context: Context, concept: String, threadId: String?, sessionId: String?) {
         if (threadId.isNullOrBlank()) return
@@ -459,30 +518,49 @@ class ChatViewModel(
     }
 
 
-    // Start the typing animation for AI response
+    private fun containsKannada(text: String): Boolean {
+        return text.any { ch ->
+            val code = ch.code
+            // Kannada block
+            code in 0x0C80..0x0CFF ||
+                    // Kannada extended / common related ranges (conservative)
+                    code in 0x0C00..0x0CFF
+        }
+    }
+
+    private fun containsLatinLetters(text: String): Boolean {
+        return text.any { ch ->
+            // Basic Latin and Latin-1 Supplement (covers common English chars)
+            val code = ch.code
+            (code in 0x0041..0x007A) || (code in 0x00C0..0x00FF) || ch.isWhitespace() || ch.isDigit()
+        }
+    }
+
+    private fun detectSourceLanguage(text: String): String {
+        // Prioritize Kannada detection if any Kannada script characters exist
+        return when {
+            containsKannada(text) -> "kn"
+            containsLatinLetters(text) -> "en"
+            else -> {
+                // Safe default to English for downstream translation compatibility
+                "en"
+            }
+        }
+    }
+
     private fun startTypingAnimation(fullText: String, context: Context) {
+        // Store the original API response
+        _originalAIResponse.value = fullText
+
         typingJob?.cancel()
         typingJob = viewModelScope.launch {
             _isTyping.value = true
             _typingText.value = ""
 
-            DebugLogger.debugLog("ChatViewModel", "AI RAW OUTPUT: ${fullText.take(100)}")
+            DebugLogger.debugLog("ChatViewModel", "AI RAW OUTPUT (preview): ${fullText.take(1000)}")
 
             val finalText = withContext(Dispatchers.IO) {
-                try {
-                    val targetLang = _currentLanguage.value
-                    val translated = if (targetLang == "en") {
-                        TranslationHelper.translateText(fullText, "kn", "en")
-                    } else {
-                        TranslationHelper.translateText(fullText, "en", "kn")
-                    }
-
-                    translated.ifBlank { fullText }
-                        .replace(Regex("^Agent:\\s*"), "")
-                } catch (e: Exception) {
-                    DebugLogger.errorLog("ChatViewModel", "Translation error: ${e.message}")
-                    fullText
-                }
+                getOrTranslateText(fullText, context)
             }
 
             _translatedOutput.value = finalText
@@ -625,14 +703,14 @@ class ChatViewModel(
                     DebugLogger.debugLog("ChatViewModel", "Response models: ${response?.availableModels}")
 
                     val models = response?.availableModels ?: emptyList()
-                    DebugLogger.debugLog("ChatViewModel", "✓ Fetched ${models.size} models from API")
+                    DebugLogger.debugLog("ChatViewModel", " Fetched ${models.size} models from API")
                     models.forEach { model ->
                         DebugLogger.debugLog("ChatViewModel", "  - $model")
                     }
                     models
                 } else {
                     val error = agenticResult.exceptionOrNull()?.message ?: "Unknown error"
-                    DebugLogger.errorLog("ChatViewModel", "✗ Failed to fetch models: $error")
+                    DebugLogger.errorLog("ChatViewModel", "Failed to fetch models: $error")
                     emptyList()                }
                 // Merge
                 val mergedModels = (googleModels + groqModels).distinct()
@@ -704,8 +782,20 @@ class ChatViewModel(
         _typingText.value = ""
     }
 
-    fun setCurrentLanguage(languageShort: String) {
+    fun setCurrentLanguage(languageShort: String, context: Context) {
         _currentLanguage.value = languageShort
+
+        // Re-translate current displayed message if exists
+        viewModelScope.launch {
+            val original = _originalAIResponse.value
+            if (original.isNotBlank()) {
+                val newTranslation = withContext(Dispatchers.IO) {
+                    getOrTranslateText(original, context)
+                }
+                _translatedOutput.value = newTranslation
+                _fullTextForTTS.value = newTranslation
+            }
+        }
     }
 
     fun getOriginalConceptName(context: Context, displayedConcept: String, languageShort: String): String {
