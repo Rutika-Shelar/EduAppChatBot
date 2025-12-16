@@ -231,3 +231,27 @@ private fun isValidConceptMap(json: String): Boolean {
         return false
     }
 }
+
+fun hasValidTabs(
+    json: String,
+    imageUrl: String?,
+    videoUrl: String?
+): Boolean {
+    var tabCount = 0
+
+    if (isValidConceptMap(json)) {
+        tabCount++
+    }
+
+    videoUrl?.let { url ->
+        if (extractYoutubeId(url) != null) {
+            tabCount++
+        }
+    }
+
+    if (!imageUrl.isNullOrBlank() && imageUrl != "null") {
+        tabCount++
+    }
+
+    return tabCount > 0
+}
