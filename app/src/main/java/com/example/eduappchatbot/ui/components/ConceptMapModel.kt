@@ -23,6 +23,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -162,6 +163,7 @@ fun ConceptMapModel(
             modifier = Modifier
                 .fillMaxSize()
                 .background(BackgroundPrimary)
+                .clipToBounds()
 
                 /**
                  * Gesture Handler: Pinch-to-zoom
@@ -211,6 +213,9 @@ fun ConceptMapModel(
             // Calculate and store canvas center
             val center = Offset(size.width / 2, size.height / 2)
             interactionHandler.updateCanvasCenter(center)
+
+            // Clamp pan/offset so graph stays visible inside the canvas
+            interactionHandler.clampToBounds(nodePosition, size)
 
             /**
              * Safety check - exit if no data

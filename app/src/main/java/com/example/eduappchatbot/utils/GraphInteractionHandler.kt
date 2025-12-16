@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import kotlin.ranges.coerceIn
 
 /**
@@ -68,6 +69,65 @@ class GraphInteractionHandler(
      */
     fun updateCanvasCenter(center: Offset) {
         canvasCenter = center
+    }
+
+    /**
+     * Clamp the current offset so the transformed graph bounding box stays inside the canvas.
+     *
+     * Calculation notes:
+     * - Node positions are expressed in graph coordinate space.
+     * - After transform, a node at position p maps to screen:
+     *     screen(p) = scale * (p - canvasCenter) + canvasCenter + offset
+     * - We compute the bounding box of all nodes in graph space and then compute the allowed
+     *   range for `offset` so that the bounding box intersects or fits inside the canvas.
+     *
+     * This method should be called from the composable drawing scope where `canvasCenter` and
+     * `size` are known (for example, inside the Canvas draw block).
+     */
+    fun clampToBounds(nodePositions: Map<String, Offset>, canvasSize: Size) {
+        if (nodePositions.isEmpty()) return
+
+        // Compute graph bounding box
+        var minX = Float.POSITIVE_INFINITY
+        var minY = Float.POSITIVE_INFINITY
+        var maxX = Float.NEGATIVE_INFINITY
+        var maxY = Float.NEGATIVE_INFINITY
+
+        for ((_, pos) in nodePositions) {
+            if (pos.x < minX) minX = pos.x
+            if (pos.y < minY) minY = pos.y
+            if (pos.x > maxX) maxX = pos.x
+            if (pos.y > maxY) maxY = pos.y
+        }
+
+        val cX = canvasCenter.x
+        val cY = canvasCenter.y
+        val canvasW = canvasSize.width
+        val canvasH = canvasSize.height
+
+        // Transformed bbox: screen = scale*(graph - center) + center + offset
+        // We want: minScreenX >= 0  and maxScreenX <= canvasW
+        val leftBound = -scale * (minX - cX) - cX
+        val rightBound = canvasW - (scale * (maxX - cX) + cX)
+
+        // For Y axis
+        val topBound = -scale * (minY - cY) - cY
+        val bottomBound = canvasH - (scale * (maxY - cY) + cY)
+
+        // Determine allowed ranges (min <= max). If graph is larger than canvas when scaled,
+        // the allowed interval is inverted; handle by taking min/max accordingly so coerceIn works.
+        val allowedMinX = minOf(leftBound, rightBound)
+        val allowedMaxX = maxOf(leftBound, rightBound)
+        val allowedMinY = minOf(topBound, bottomBound)
+        val allowedMaxY = maxOf(topBound, bottomBound)
+
+        val clampedX = offset.x.coerceIn(allowedMinX, allowedMaxX)
+        val clampedY = offset.y.coerceIn(allowedMinY, allowedMaxY)
+
+        if (clampedX != offset.x || clampedY != offset.y) {
+            offset = Offset(clampedX, clampedY)
+            DebugLogger.debugLog(TAG, "Offset clamped to: $offset")
+        }
     }
 
     /**
