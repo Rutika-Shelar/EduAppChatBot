@@ -2,6 +2,7 @@ package com.example.eduappchatbot.viewModels.speechModels
 
 import android.content.Context
 import android.os.Build
+import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
@@ -27,7 +28,6 @@ class TextToSpeech : ViewModel(), TextToSpeech.OnInitListener {
         val statusMessage: String = "",
         val debugMode: Boolean = false,
         val availableVoices: List<Voice> = emptyList(),
-
         val selectedVoice: Voice? = null,
         val selectedVoiceDisplayName: String = "Default Voice",
         val currentViseme: String = "rest",
@@ -39,7 +39,6 @@ class TextToSpeech : ViewModel(), TextToSpeech.OnInitListener {
 
     private var textToSpeech: TextToSpeech? = null
     private var webView: WebView? = null
-    private var availableVoices: List<Voice> = emptyList()
 
     private val languagePatterns = mapOf(
         "hi-IN" to Regex("[\u0900-\u097F]+"),
@@ -95,17 +94,16 @@ class TextToSpeech : ViewModel(), TextToSpeech.OnInitListener {
 
         // onRangeStart is available API 26+
         override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // map character offset to word index
-                val idx = currentWordRanges.indexOfFirst { range -> start in range }
-                if (idx >= 0) {
-                    _currentWordIndex.value = idx
-                }
+            // map character offset to word index
+            val idx = currentWordRanges.indexOfFirst { range -> start in range }
+            if (idx >= 0) {
+                _currentWordIndex.value = idx
             }
         }
     }
 
     fun initialize(context: Context) {
+        //Only skip if the engine instance already exists
         if (textToSpeech != null) return
 
         updateStatus("Initializing Text-to-Speech...")
@@ -230,14 +228,10 @@ class TextToSpeech : ViewModel(), TextToSpeech.OnInitListener {
             tts.voice = voice
 
             //  FORCE the engine to accept the new voice with a silent flush
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                tts.speak("", TextToSpeech.QUEUE_FLUSH, null, "force_voice_${System.currentTimeMillis()}")
-            } else {
-                @Suppress("DEPRECATION")
-                val params = HashMap<String, String>()
-                params[TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID] = "force_voice_${System.currentTimeMillis()}"
-                tts.speak("", TextToSpeech.QUEUE_FLUSH, params)
-            }
+            val utteranceId = "force_voice_${System.currentTimeMillis()}"
+            val bundle = Bundle()
+            bundle.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
+            tts.speak("", TextToSpeech.QUEUE_FLUSH, bundle,utteranceId)
             _state.value = _state.value.copy(
                 selectedVoice = voice,
                 selectedVoiceDisplayName = formatVoiceName(voice)
@@ -268,10 +262,11 @@ class TextToSpeech : ViewModel(), TextToSpeech.OnInitListener {
                 if (tts.voice != preferredVoice) {
                     tts.stop()
                     tts.voice = preferredVoice
-        // Force the engine to accept the new voice with a silent flush
-                    if (Build.VERSION.SDK_INT >= 21) {
-                        tts.speak("", TextToSpeech.QUEUE_FLUSH, null, "pre_speak_flush")
-                    }
+                    // Force the engine to accept the new voice with a silent flush
+                    val bundle = Bundle()
+                    val utteranceId = "tts_${System.currentTimeMillis()}"
+                    bundle.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "pre_speak_flush")
+                    tts.speak("", TextToSpeech.QUEUE_FLUSH, bundle,utteranceId)
                 }
             }
 
@@ -288,15 +283,9 @@ class TextToSpeech : ViewModel(), TextToSpeech.OnInitListener {
             startLipSync(text)
 
             val utteranceId = "tts_${System.currentTimeMillis()}"
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
-            } else {
-                val params = HashMap<String, String>()
-                params[TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID] = utteranceId
-                @Suppress("DEPRECATION")
-                tts.speak(text, TextToSpeech.QUEUE_FLUSH, params)
-            }
+            val bundle = Bundle()
+            bundle.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, bundle,utteranceId)
         }
     }
 
@@ -346,18 +335,18 @@ class TextToSpeech : ViewModel(), TextToSpeech.OnInitListener {
     private fun setLanguageInternal(languageCode: String) {
         textToSpeech?.let { tts ->
             val locale = when (languageCode) {
-                "en-IN" -> Locale("en", "IN")
-                "hi-IN" -> Locale("hi", "IN")
-                "kn-IN" -> Locale("kn", "IN")
-                "ta-IN" -> Locale("ta", "IN")
-                "te-IN" -> Locale("te", "IN")
-                else -> Locale("en", "IN")
+                "en-IN" -> createLocale("en", "IN")
+                "hi-IN" -> createLocale("hi", "IN")
+                "kn-IN" -> createLocale("kn", "IN")
+                "ta-IN" -> createLocale("ta", "IN")
+                "te-IN" -> createLocale("te", "IN")
+                else -> createLocale("en", "IN")
             }
 
             val result = tts.setLanguage(locale)
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                 updateStatus("Warning: Language $languageCode not fully supported, using fallback")
-                tts.language = Locale("en", "IN")
+                tts.language = createLocale("en", "IN")
                 _state.value = _state.value.copy(selectedLanguage = "hi-IN")
             } else {
                 _state.value = _state.value.copy(selectedLanguage = languageCode)
@@ -628,6 +617,24 @@ class TextToSpeech : ViewModel(), TextToSpeech.OnInitListener {
             isSpeaking = false,
             statusMessage = "Text-to-Speech resources released"
         )
+    }
+
+    /**
+     * Create a Locale using the modern API (handles deprecation)
+     * Uses Locale.Builder for API 21+, falls back to constructor for older APIs
+     */
+    private fun createLocale(language: String, country: String): Locale {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            // Modern way (API 21+)
+            Locale.Builder()
+                .setLanguage(language)
+                .setRegion(country)
+                .build()
+        } else {
+            // Fallback for older APIs (below API 21)
+            @Suppress("DEPRECATION")
+            Locale(language, country)
+        }
     }
 
     override fun onCleared() {
