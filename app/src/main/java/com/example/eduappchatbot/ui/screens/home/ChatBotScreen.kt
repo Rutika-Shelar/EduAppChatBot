@@ -138,9 +138,6 @@ fun ChatBotScreen(
     // Collect available models
     val availableModels by chatViewModel.availableModels.collectAsState()
 
-    // display concept map only for this nodes
-    val visualNodes = remember { setOf("CI", "GE") }
-
     // Determine if any visual content is available to display
     val hasAnyVisualContent = remember(conceptMapJSON, imageUrl, videoUrl) {
         hasValidTabs(
@@ -931,16 +928,19 @@ fun ChatBotScreen(
         message = stringResource(R.string.logout_confirmation),
         confirmText = stringResource(R.string.logout),
         onConfirm = {
+            //stop ongoing processes
             sttController.stopListening()
             ttsController.stop()
             showLogoutDialog = false
             chatViewModel.stopNetworkObservation()
-
+            //Clear all session data
+            chatViewModel.clearAllSessions(context)
             userRepository.clearUserInfo()
+            showLogoutDialog = false
             navController.navigate("userInfo") {
                 popUpTo("chatBot") { inclusive = true }
             }
-            // logout actions
+            DebugLogger.debugLog("ChatBotScreen", "Logout complete - all data cleared")
         },
         onDismiss = {
             showLogoutDialog = false

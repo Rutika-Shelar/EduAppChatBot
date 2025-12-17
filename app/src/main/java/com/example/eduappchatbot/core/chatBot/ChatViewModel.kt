@@ -22,7 +22,6 @@ import com.example.eduappchatbot.data.repository.SessionRepository
 import com.example.eduappchatbot.data.repository.UserSessionRepository
 import com.example.eduappchatbot.utils.TranslationHelper
 import androidx.core.content.edit
-import kotlin.collections.plusAssign
 
 class ChatViewModel(
     agenticAIBaseUrl: String,
@@ -257,6 +256,41 @@ class ChatViewModel(
             } catch (e: Exception) {
                 DebugLogger.errorLog("ChatViewModel", "loadThreadMapping failed: ${e.message}")
                 null
+            }
+        }
+    }
+
+    /**
+     * Clear all session data - called on logout
+     */
+    fun clearAllSessions(context: Context) {
+        viewModelScope.launch {
+            try {
+                // Clear in-memory maps
+                conceptThreadMap.clear()
+                conceptSessionMap.clear()
+                _translationCache.value = emptyMap() // Clear translation cache
+
+                // Clear SharedPreferences
+                withContext(Dispatchers.IO) {
+                    SessionRepository(context.applicationContext).clearAllMappings()
+                }
+
+                // Reset current session state
+                _isSessionStarted.value = false
+                agenticAIClient.setCurrentThreadAndSession(null, null)
+
+                // Clear messages and states
+                _messages.value = emptyList()
+                _selectedConcept.value = null
+                _pendingFirstUserMessage.value = null
+                _originalAIResponse.value = ""
+                _translatedOutput.value = ""
+                _fullTextForTTS.value = ""
+
+                DebugLogger.debugLog("ChatViewModel", "All sessions cleared successfully")
+            } catch (e: Exception) {
+                DebugLogger.errorLog("ChatViewModel", "clearAllSessions failed: ${e.message}")
             }
         }
     }
@@ -719,7 +753,7 @@ class ChatViewModel(
 
                 // Set default model if none selected
                 if (_selectedModel.value.isEmpty() && mergedModels.isNotEmpty()) {
-                    _selectedModel.value = mergedModels.first()
+                    setSelectedModel(mergedModels.first())
                 }
 
                 DebugLogger.debugLog(
@@ -733,7 +767,7 @@ class ChatViewModel(
                 val fallbackModel = "meta-llama/llama-4-scout-17b-16e-instruct"
                 _availableModels.value = listOf(fallbackModel)
                 if (_selectedModel.value.isEmpty()) {
-                    _selectedModel.value = fallbackModel
+                    setSelectedModel(fallbackModel)
                 }
             }
         }
@@ -824,11 +858,7 @@ class ChatViewModel(
             conceptSessionMap.remove(originalConcept)
 
             withContext(Dispatchers.IO) {
-                val prefs = context.getSharedPreferences("session_map", Context.MODE_PRIVATE)
-                val raw = prefs.getString("concept_thread_map", "{}") ?: "{}"
-                val json = JSONObject(raw)
-                json.remove(originalConcept)
-                prefs.edit { putString("concept_thread_map", json.toString()) }
+                SessionRepository(context.applicationContext).deleteMapping(originalConcept)
             }
 
             _isSessionStarted.value = false
