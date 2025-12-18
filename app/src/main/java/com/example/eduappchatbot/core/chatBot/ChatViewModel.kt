@@ -321,7 +321,13 @@ class ChatViewModel(
         }
     }
 
-    // Select a concept to start or resume a session
+    /**
+     * Select a concept to start or resume a session
+     * - Check for existing session mapping
+     * - Resume or start new session accordingly
+     * - Manage loading and animation states
+     *
+      */
     fun selectConcept(displayedConcept: String, context: Context) {
         viewModelScope.launch {
             val originalConcept = conceptRepository.getOriginalConcept(
@@ -330,7 +336,7 @@ class ChatViewModel(
                 _currentLanguage.value
             )
 
-            _selectedConcept.value = displayedConcept
+            _selectedConcept.value = displayedConcept //update selected concept
 
             DebugLogger.debugLog(
                 "ChatViewModel",
@@ -338,38 +344,80 @@ class ChatViewModel(
             )
 
             _isLoading.value = true
+            //reset states fix the issue of wrong concept map and tts text
+            _agentState.value=""
             cancelAnimations()
+            resetConceptMap()
 
-            val stored = loadThreadMapping(context, originalConcept)
-            if (stored != null) {
-                resumeExistingSession(context, stored.first, stored.second)
-                return@launch
+            try {
+                val stored = loadThreadMapping(context, originalConcept)
+                if (stored != null) {
+                    resumeExistingSession(context, stored.first, stored.second)
+                } else {
+                    startNewSession(context, originalConcept)
+                }
+            } catch (e: Exception) {
+                DebugLogger.errorLog("ChatViewModel", "selectConcept error: ${e.message}")
+                handleRequestFailure("Failed to load concept: ${e.message}")
             }
-
-            startNewSession(context, originalConcept)
         }
     }
-// Resume an existing session using stored thread and session IDs
+
+    /**
+     * Resume an existing session given thread and session IDs
+     * - Sets current thread and session
+     * - Marks session as started
+     * - Fetches session history and appends last assistant message with typing animation
+     * - Sends any pending user message that was queued before session was ready
+     */
     private suspend fun resumeExistingSession(context: Context, threadId: String, sessionId: String?) {
         DebugLogger.debugLog("ChatViewModel", "Resuming session - thread=$threadId")
 
+    // Set current thread and session
     agenticAIClient.setCurrentThreadAndSession(threadId, sessionId)
+    // Mark session as started
         _isSessionStarted.value = true
 
         try {
+            // Fetch session history
             val histResult = agenticAIClient.getSessionHistory(threadId)
+
+            // On success, extract last assistant message
             if (histResult.isSuccess) {
                 val history = histResult.getOrNull()
                 val messages = history?.messages ?: emptyList()
+                // Append past messages to chat
                 val lastAssistant = messages.asSequence()
                     .lastOrNull { msg ->
                         (msg["role"] as? String)?.lowercase() in listOf("assistant", "ai")
                     }
                     ?.get("content") as? String
-
+                // Show last assistant message with typing animation
                 if (!lastAssistant.isNullOrBlank()) {
                     _fullTextForTTS.value = lastAssistant
-                    fetchConceptMapWithLLM(lastAssistant)
+                    // Fetch current session status to get the agent state
+                    val statusResult = agenticAIClient.getSessionStatus(threadId)
+
+                    if (statusResult.isSuccess) {
+                        val currentState = statusResult.getOrNull()?.currentState.orEmpty()
+                        _agentState.value = currentState
+
+                        if (
+                            shouldGenerateConceptMap(currentState) &&
+                            lastAssistant.isNotBlank()
+                        ) {
+                            fetchConceptMapWithLLM(lastAssistant)
+                        }else{
+                            resetConceptMap()
+                            DebugLogger.debugLog("ChatViewModel", "Skipping concept map generation on resume - agent state: '$currentState'")
+                        }
+
+                } else {
+                        DebugLogger.errorLog(
+                            "ChatViewModel",
+                            "Failed to fetch session status: ${statusResult.exceptionOrNull()?.message}"
+                        )
+                    }
                     startTypingAnimation(lastAssistant, context)
                 }
             }
@@ -379,13 +427,21 @@ class ChatViewModel(
             _isLoading.value = false
         }
 
+    // pending user message is that was sent before session was ready
+    // send it now
         _pendingFirstUserMessage.value?.let { msg ->
             _pendingFirstUserMessage.value = null
             sendMessageAfterSessionReady(msg, context)
         }
     }
 
-    // Start a new session for the selected concept
+    /**
+     * Start a new session for the selected concept
+     * if result success then save thread and session mapping in SharedPreferences
+     * generate concept map if agent state is valid for concept map
+     * start typing animation with welcome text
+     *
+      */
     private suspend fun startNewSession(context: Context, originalConcept: String) {
         try {
             val isKannada = _currentLanguage.value.equals("kn", ignoreCase = true)
@@ -417,6 +473,9 @@ class ChatViewModel(
                         _fullTextForTTS.value = welcomeText
                         if (shouldGenerateConceptMap(response.currentState)) {
                             fetchConceptMapWithLLM(welcomeText)
+                        }else {
+                            // Reset concept map if state is invalid
+                            resetConceptMap()
                         }
                         startTypingAnimation(welcomeText, context)
                     }
@@ -466,6 +525,7 @@ class ChatViewModel(
         _isLoading.value = true
         cancelAnimations()
 
+
         slowNetworkJob = viewModelScope.launch {
             delay(5000L)
             DebugLogger.debugLog("ChatViewModel", "Slow network detected")
@@ -509,6 +569,10 @@ class ChatViewModel(
                         _fullTextForTTS.value = text
                         if (shouldGenerateConceptMap(resp.currentState)) {
                             fetchConceptMapWithLLM(text)
+                        } else {
+                            DebugLogger.debugLog("ChatViewModel", "State '${resp.currentState}' doesn't require concept map - resetting")
+                            // Reset concept map if state is invalid
+                            resetConceptMap()
                         }
                         startTypingAnimation(text, context)
                     }
@@ -582,6 +646,14 @@ class ChatViewModel(
         }
     }
 
+    /**
+     * Start typing animation for AI response
+     * - Translates text if needed
+     * - Updates translated output and TTS text
+     * - Animates typing word by word
+     * - Finally appends full message to chat
+     * @param fullText The full AI response text
+     */
     private fun startTypingAnimation(fullText: String, context: Context) {
         // Store the original API response
         _originalAIResponse.value = fullText
@@ -616,28 +688,45 @@ class ChatViewModel(
         }
     }
 
+    private fun resetConceptMap() {
+        _conceptMapJSON.value = """{"visualization_type":"None","main_concept":"Chat for a Concept Map","nodes":[],"edges":[]}"""
+        DebugLogger.debugLog("ChatViewModel", "Concept map reset to default")
+    }
+
     private fun isGroqModel(modelId: String): Boolean {
         return groqModels.any { it.equals(modelId, ignoreCase = true) }
     }
 
     private fun fetchConceptMapWithLLM(aiResponse: String) {
-        viewModelScope.launch {
+        val stateSnapshot = _agentState.value
+
+        if (!shouldGenerateConceptMap(stateSnapshot)) {
+            DebugLogger.debugLog(
+                "ChatViewModel",
+                "Concept map skipped, state=$stateSnapshot"
+            )
+            return
+        }
+
+        conceptMapJob?.cancel()
+
+        conceptMapJob = viewModelScope.launch {
             try {
                 val currentModel = _selectedModel.value
-
-                if (isGroqModel(currentModel)) {
-                    // Use LLMClient (Groq)
-                    DebugLogger.debugLog("ChatViewModel", "Using Groq client for model: $currentModel")
-                    val response = llmClient.queryLLM(aiResponse, _currentLanguage.value)
-                    val conceptMapJson = llmClient.extractConceptMapJSON(response)
-                    startProgressiveConceptMap(conceptMapJson)
+                val response = if (isGroqModel(currentModel)) {
+                    llmClient.queryLLM(aiResponse, _currentLanguage.value)
                 } else {
-                    // Use GeminiLLMClient
-                    DebugLogger.debugLog("ChatViewModel", "Using Gemini client for model: $currentModel")
-                    val response = geminiClient.queryLLM(aiResponse, _currentLanguage.value)
-                    val conceptMapJson = geminiClient.extractConceptMapJSON(response)
-                    startProgressiveConceptMap(conceptMapJson)
+                    geminiClient.queryLLM(aiResponse, _currentLanguage.value)
                 }
+
+                val json = if (isGroqModel(currentModel)) {
+                    llmClient.extractConceptMapJSON(response)
+                } else {
+                    geminiClient.extractConceptMapJSON(response)
+                }
+
+                startProgressiveConceptMap(json)
+
             } catch (e: Exception) {
                 DebugLogger.errorLog("ChatViewModel", "Concept map error: ${e.message}")
             }
@@ -817,17 +906,26 @@ class ChatViewModel(
     }
 
     fun setCurrentLanguage(languageShort: String, context: Context) {
+        val oldLang = _currentLanguage.value
         _currentLanguage.value = languageShort
 
-        // Re-translate current displayed message if exists
         viewModelScope.launch {
-            val original = _originalAIResponse.value
-            if (original.isNotBlank()) {
-                val newTranslation = withContext(Dispatchers.IO) {
-                    getOrTranslateText(original, context)
+            // Re-translate last AI response
+            _originalAIResponse.value.takeIf { it.isNotBlank() }?.let { original ->
+                val newTrans = withContext(Dispatchers.IO) { getOrTranslateText(original, context) }
+                _translatedOutput.value = newTrans
+                _fullTextForTTS.value = newTrans
+            }
+
+            // Re-translate all past AI messages
+            if (oldLang != languageShort) {
+                _messages.update { list ->
+                    list.map { msg ->
+                        if (msg.sender == "ai" && !msg.isError) {
+                            msg
+                        } else msg
+                    }
                 }
-                _translatedOutput.value = newTranslation
-                _fullTextForTTS.value = newTranslation
             }
         }
     }
@@ -853,19 +951,25 @@ class ChatViewModel(
                 displayedConcept,
                 _currentLanguage.value
             )
+            try {
+                conceptThreadMap.remove(originalConcept)
+                conceptSessionMap.remove(originalConcept)
 
-            conceptThreadMap.remove(originalConcept)
-            conceptSessionMap.remove(originalConcept)
+                withContext(Dispatchers.IO) {
+                    SessionRepository(context.applicationContext).deleteMapping(originalConcept)
+                }
 
-            withContext(Dispatchers.IO) {
-                SessionRepository(context.applicationContext).deleteMapping(originalConcept)
+                _isSessionStarted.value = false
+                agenticAIClient.setCurrentThreadAndSession(null, null)
+                _messages.value = emptyList()
+                resetConceptMap()
+
+                selectConcept(displayedConcept, context)
+            }catch (e:Exception){
+                DebugLogger.errorLog("ChatViewModel", "startFreshSession failed: ${e.message}")
+                handleRequestFailure("Failed to start fresh session: ${e.message}")
+                _isLoading.value =false
             }
-
-            _isSessionStarted.value = false
-            agenticAIClient.setCurrentThreadAndSession(null, null)
-            _messages.value = emptyList()
-
-            selectConcept(displayedConcept, context)
         }
     }
 
