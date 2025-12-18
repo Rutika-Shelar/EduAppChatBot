@@ -395,29 +395,19 @@ class ChatViewModel(
                 // Show last assistant message with typing animation
                 if (!lastAssistant.isNullOrBlank()) {
                     _fullTextForTTS.value = lastAssistant
-                    // Fetch current session status to get the agent state
-                    val statusResult = agenticAIClient.getSessionStatus(threadId)
 
-                    if (statusResult.isSuccess) {
-                        val currentState = statusResult.getOrNull()?.currentState.orEmpty()
-                        _agentState.value = currentState
-
-                        if (
-                            shouldGenerateConceptMap(currentState) &&
-                            lastAssistant.isNotBlank()
-                        ) {
-                            fetchConceptMapWithLLM(lastAssistant)
-                        }else{
-                            resetConceptMap()
-                            DebugLogger.debugLog("ChatViewModel", "Skipping concept map generation on resume - agent state: '$currentState'")
+                    //  Launch status fetch in parallel -no wait
+                    viewModelScope.launch {
+                        try {
+                            val statusResult = agenticAIClient.getSessionStatus(threadId)
+                            if (statusResult.isSuccess) {
+                                _agentState.value = statusResult.getOrNull()?.currentState.orEmpty()
+                            }
+                        } catch (e: Exception) {
+                            DebugLogger.errorLog("ChatViewModel", "Status fetch error: ${e.message}")
                         }
-
-                } else {
-                        DebugLogger.errorLog(
-                            "ChatViewModel",
-                            "Failed to fetch session status: ${statusResult.exceptionOrNull()?.message}"
-                        )
                     }
+
                     startTypingAnimation(lastAssistant, context)
                 }
             }
@@ -459,7 +449,6 @@ class ChatViewModel(
                     isKannada = isKannada//boolean flag for kannada
                 )
             }
-
             if (result.isSuccess) {
                 val response = result.getOrNull()
                 if (response != null && response.success) {
@@ -471,12 +460,6 @@ class ChatViewModel(
                     val welcomeText = response.agentResponse.orEmpty()
                     if (welcomeText.isNotBlank()) {
                         _fullTextForTTS.value = welcomeText
-                        if (shouldGenerateConceptMap(response.currentState)) {
-                            fetchConceptMapWithLLM(welcomeText)
-                        }else {
-                            // Reset concept map if state is invalid
-                            resetConceptMap()
-                        }
                         startTypingAnimation(welcomeText, context)
                     }
                 } else {
@@ -565,15 +548,6 @@ class ChatViewModel(
                             handleRequestFailure("Empty response from server")
                             return@launch
                         }
-
-                        _fullTextForTTS.value = text
-                        if (shouldGenerateConceptMap(resp.currentState)) {
-                            fetchConceptMapWithLLM(text)
-                        } else {
-                            DebugLogger.debugLog("ChatViewModel", "State '${resp.currentState}' doesn't require concept map - resetting")
-                            // Reset concept map if state is invalid
-                            resetConceptMap()
-                        }
                         startTypingAnimation(text, context)
                     }
                 }
@@ -658,6 +632,10 @@ class ChatViewModel(
         // Store the original API response
         _originalAIResponse.value = fullText
 
+        viewModelScope.launch {
+            fetchConceptMapWithLLM(fullText)
+        }
+
         typingJob?.cancel()
         typingJob = viewModelScope.launch {
             _isTyping.value = true
@@ -698,20 +676,22 @@ class ChatViewModel(
     }
 
     private fun fetchConceptMapWithLLM(aiResponse: String) {
-        val stateSnapshot = _agentState.value
-
-        if (!shouldGenerateConceptMap(stateSnapshot)) {
-            DebugLogger.debugLog(
-                "ChatViewModel",
-                "Concept map skipped, state=$stateSnapshot"
-            )
-            return
-        }
 
         conceptMapJob?.cancel()
 
         conceptMapJob = viewModelScope.launch {
             try {
+                // State check inside coroutine - doesn't block caller
+                val stateSnapshot = _agentState.value
+                if (!shouldGenerateConceptMap(stateSnapshot)) {
+                    DebugLogger.debugLog(
+                        "ChatViewModel",
+                        "Concept map skipped, state=$stateSnapshot"
+                    )
+                    resetConceptMap()
+                    return@launch
+                }
+
                 val currentModel = _selectedModel.value
                 val response = if (isGroqModel(currentModel)) {
                     llmClient.queryLLM(aiResponse, _currentLanguage.value)
@@ -729,6 +709,7 @@ class ChatViewModel(
 
             } catch (e: Exception) {
                 DebugLogger.errorLog("ChatViewModel", "Concept map error: ${e.message}")
+                resetConceptMap()
             }
         }
     }
