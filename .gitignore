@@ -16,6 +16,7 @@ local.properties
 app/src/main/res/values/keys.xml
 .ideaapp/build/outputs/apk/release/
 app/build/outputs/apk/debug/
+app/build/outputs/apk/release/
 *.apk
 *.aab
 *.ap_
