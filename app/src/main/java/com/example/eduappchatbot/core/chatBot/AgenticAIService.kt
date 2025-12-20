@@ -51,12 +51,17 @@ data class StartSessionRequest(
     @SerializedName("student_id") val studentId: String,
     @SerializedName("persona_name") val personaName: String? = null,
     @SerializedName("session_label") val sessionLabel: String? = null,
-    @SerializedName("is_kannada") val isKannada: Boolean = false
+    @SerializedName("is_kannada") val isKannada: Boolean = false,
+    @SerializedName("model") val model: String? = "gemma-3-27b-it",
+    @SerializedName("student_level") val studentLevel: String = "medium"
 )
 
 data class ContinueSessionRequest(
     @SerializedName("thread_id") val threadId: String,
-    @SerializedName("user_message") val userMessage: String
+    @SerializedName("user_message") val userMessage: String,
+    @SerializedName("model") val model: String? = "gemma-3-27b-it",
+    @SerializedName("clicked_autosuggestion") val clickedAutosuggestion: Boolean? = false,
+    @SerializedName("student_level") val studentLevel: String? = null
 )
 
 
@@ -96,8 +101,9 @@ data class StartSessionResponse(
     @SerializedName("agent_response") val agentResponse: String? = null,
     @SerializedName("current_state") val currentState: String? = null,
     @SerializedName("concept_title") val conceptTitle: String? = null,
-    val message: String? = null,
-    val metadata: SessionMetadata? = null
+    val message: String? = "Session started successfully",
+    val metadata: SessionMetadata = SessionMetadata(),
+    val autosuggestions: List<String> = emptyList()
 )
 
 data class ContinueSessionResponse(
@@ -105,8 +111,9 @@ data class ContinueSessionResponse(
     @SerializedName("thread_id") val threadId: String? = null,
     @SerializedName("agent_response") val agentResponse: String? = null,
     @SerializedName("current_state") val currentState: String? = null,
-    val metadata: SessionMetadata? = null,
-    val message: String? = null
+    val metadata: SessionMetadata = SessionMetadata(),
+    val message: String? = "Response generated successfully",
+    val autosuggestions: List<String> = emptyList()
 )
 
 data class TestImageResponse(
@@ -128,8 +135,9 @@ data class ConceptsListResponse(
     val success: Boolean = true,
     val concepts: List<String> = emptyList(),
     val total: Int = 0,
-    val message: String? = null
+    val message: String? = "Available concepts retrieved successfully"
 )
+
 data class AvailableModelsResponse(
     val success: Boolean = true,
     @SerializedName("models") val availableModels: List<String> = emptyList(),
@@ -148,7 +156,7 @@ data class PersonasListResponse(
     val success: Boolean = true,
     val personas: List<PersonaInfo> = emptyList(),
     val total: Int = 0,
-    val message: String? = null
+    val message: String? = "Available test personas retrieved successfully"
 )
 
 data class HealthResponse(
@@ -166,7 +174,7 @@ data class SessionStatusResponse(
     @SerializedName("current_state") val currentState: String? = null,
     val progress: Map<String, Any>? = null,
     @SerializedName("concept_title") val conceptTitle: String? = null,
-    val message: String? = null
+    val message: String? = "Status retrieved successfully"
 )
 
 data class SessionHistoryResponse(
@@ -176,8 +184,7 @@ data class SessionHistoryResponse(
     val messages: List<Map<String, Any>> = emptyList(),
     @SerializedName("node_transitions") val nodeTransitions: List<Map<String, Any>> = emptyList(),
     @SerializedName("concept_title") val conceptTitle: String? = null,
-    val message: String? = null
-)
+    val message: String? = "History retrieved successfully")
 
 data class SessionSummaryResponse(
     val success: Boolean = false,
@@ -188,5 +195,4 @@ data class SessionSummaryResponse(
     @SerializedName("transfer_success") val transferSuccess: Boolean? = null,
     @SerializedName("misconception_detected") val misconceptionDetected: Boolean? = null,
     @SerializedName("definition_echoed") val definitionEchoed: Boolean? = null,
-    val message: String? = null
-)
+    val message: String? = "Summary retrieved successfully")
