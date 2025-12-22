@@ -107,4 +107,9 @@
     <string name="logout">Logout</string>
     <string name="logout_confirmation">Are you sure you want to logout?</string>
     <string name="disable">disable</string>
+    <string name="level_low">low</string>
+    <string name="level_medium">medium</string>
+    <string name="level_advanced">advanced</string>
+    <string name="student_level">Student Level</string>
+    <string name="select_student_level">Select Student Level</string>
 </resources>
