@@ -23,6 +23,16 @@ import com.example.eduappchatbot.data.repository.UserSessionRepository
 import com.example.eduappchatbot.utils.TranslationHelper
 import androidx.core.content.edit
 
+
+data class AICallMetrics(
+    val totalDuration: Long,
+    val networkCallDuration: Long,
+    val parsingDuration: Long,
+    val translationDuration: Long,
+    val animationStartDuration: Long,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
 class ChatViewModel(
     agenticAIBaseUrl: String,
     geminiApiKey:String,
@@ -123,6 +133,21 @@ class ChatViewModel(
 
     private val _translationCache = MutableStateFlow<Map<String, String>>(emptyMap())
 
+    //ai call metrics for tracking latency
+    private val _aiCallMetrics = MutableStateFlow<AICallMetrics?>(null)
+    val aiCallMetrics: StateFlow<AICallMetrics?> = _aiCallMetrics
+
+    //student level
+    private val _studentLevel = MutableStateFlow("medium")
+    val studentLevel: StateFlow<String> = _studentLevel
+
+    // Autosuggestions state
+    private val _autosuggestions = MutableStateFlow<List<String>>(emptyList())
+    val autosuggestions: StateFlow<List<String>> = _autosuggestions
+
+    // Track if last autosuggestion was clicked
+    private var clickedAutosuggestion = false
+
     // User ID
     private val _userId = MutableStateFlow("")
     val userId: StateFlow<String> = _userId
@@ -170,6 +195,34 @@ class ChatViewModel(
             refreshAvailableConcepts(context, _currentLanguage.value)
             autoStartSavedConcept(context)
             DebugLogger.debugLog("ChatViewModel", "Initialization complete")
+        }
+    }
+
+    /**
+     * Handle autosuggestion tap
+     * Sends the suggestion as a message
+     */
+    fun tapAutosuggestion(suggestion: String, context: Context) {
+        viewModelScope.launch {
+            clickedAutosuggestion = true
+            sendMessage(suggestion, context)
+            // Reset after sending
+            delay(100)
+            clickedAutosuggestion = false
+        }
+    }
+
+    /**
+     * Update autosuggestions from API response
+     */
+    private fun updateAutosuggestions(suggestions: List<String>) {
+        _autosuggestions.value = suggestions
+        DebugLogger.debugLog(
+            "ChatViewModel",
+            "Autosuggestions updated: ${suggestions.size} suggestions"
+        )
+        suggestions.forEachIndexed { index, suggestion ->
+            DebugLogger.debugLog("ChatViewModel", "  [$index] $suggestion")
         }
     }
 
@@ -287,6 +340,8 @@ class ChatViewModel(
                 _originalAIResponse.value = ""
                 _translatedOutput.value = ""
                 _fullTextForTTS.value = ""
+                _autosuggestions.value = emptyList()
+                _agentState.value = ""
 
                 DebugLogger.debugLog("ChatViewModel", "All sessions cleared successfully")
             } catch (e: Exception) {
@@ -338,14 +393,12 @@ class ChatViewModel(
 
             _selectedConcept.value = displayedConcept //update selected concept
 
-            DebugLogger.debugLog(
-                "ChatViewModel",
-                "Concept selected - Displayed: '$displayedConcept', Original: '$originalConcept'"
-            )
+            DebugLogger.debugLog("ChatViewModel", "Concept selected - Displayed: '$displayedConcept', Original: '$originalConcept'")
 
             _isLoading.value = true
-            //reset states fix the issue of wrong concept map and tts text
-            _agentState.value=""
+            //reset autosuggestions when selecting new concept
+            _autosuggestions.value = emptyList()
+            _agentState.value = ""
             cancelAnimations()
             resetConceptMap()
 
@@ -361,6 +414,14 @@ class ChatViewModel(
                 handleRequestFailure("Failed to load concept: ${e.message}")
             }
         }
+    }
+
+    /**
+     * Set the student level
+     */
+    fun setStudentLevel(level: String) {
+        _studentLevel.value = level
+        DebugLogger.debugLog("ChatViewModel", "Student level changed to: $level")
     }
 
     /**
@@ -433,43 +494,112 @@ class ChatViewModel(
      *
       */
     private suspend fun startNewSession(context: Context, originalConcept: String) {
+        val sessionStartOverallMs = System.currentTimeMillis()
+
         try {
             val isKannada = _currentLanguage.value.equals("kn", ignoreCase = true)
             val userName = _userId.value.ifBlank { "android_user" }
 
-            DebugLogger.debugLog(
-                "ChatViewModel",
-                "Starting NEW session - Concept: '$originalConcept', User: '$userName', isKannada: $isKannada"
-            )
+            DebugLogger.debugLog("ChatViewModel", "═══════════════════════════════════════════════════════════")
+            DebugLogger.debugLog("ChatViewModel", "┌─ NEW SESSION INITIALIZATION")
+            DebugLogger.debugLog("ChatViewModel", "├─ Timestamp: $sessionStartOverallMs")
+            DebugLogger.debugLog("ChatViewModel", "├─ Concept: '$originalConcept'")
+            DebugLogger.debugLog("ChatViewModel", "├─ User: '$userName'")
+            DebugLogger.debugLog("ChatViewModel", "├─ Kannada Mode: $isKannada")
+            DebugLogger.debugLog("ChatViewModel", "└─ Calling agenticAIClient.startSession()")
+
+
+            val networkStartMs = System.currentTimeMillis()
+            DebugLogger.debugLog("ChatViewModel", "│")
+            DebugLogger.debugLog("ChatViewModel", "├─ [NETWORK CALL] Starting at $networkStartMs")
+
+            val modelForSession = if (isGroqModel(_selectedModel.value)) {
+                DebugLogger.debugLog("ChatViewModel", "├─ Groq model detected - passing null to AgenticAI")
+                null
+            } else {
+                _selectedModel.value
+            }
 
             val result = withTimeout(120_000L) {
                 agenticAIClient.startSession(
                     conceptTitle = originalConcept,
-                    studentId = userName,//username as userid
-                    isKannada = isKannada//boolean flag for kannada
+                    studentId = userName,
+                    isKannada = isKannada,
+                    model=modelForSession,
+                    studentLevel = _studentLevel.value
                 )
             }
+
+            val networkEndMs = System.currentTimeMillis()
+            val networkDurationMs = networkEndMs - networkStartMs
+
+            DebugLogger.debugLog("ChatViewModel", "├─ [NETWORK CALL] Completed in ${networkDurationMs}ms")
+
             if (result.isSuccess) {
                 val response = result.getOrNull()
                 if (response != null && response.success) {
+                    val processingStartMs = System.currentTimeMillis()
+                    DebugLogger.debugLog("ChatViewModel", "│")
+                    DebugLogger.debugLog("ChatViewModel", "├─ [RESPONSE PROCESSING] Starting")
+
+
                     _isSessionStarted.value = true
                     saveThreadMapping(context, originalConcept, response.threadId, response.sessionId)
 
                     _agentState.value = response.currentState.orEmpty()
+                    // Update autosuggestions from response
+                    updateAutosuggestions(response.autosuggestions)
+                    DebugLogger.debugLog("ChatViewModel", "├─ Autosuggestions received: ${response.autosuggestions.size}")
+
+                    val processingDurationMs = System.currentTimeMillis() - processingStartMs
+                    DebugLogger.debugLog("ChatViewModel", "├─ [RESPONSE PROCESSING] Completed in ${processingDurationMs}ms")
+                    DebugLogger.debugLog("ChatViewModel", "├─ Thread ID: ${response.threadId}")
+                    DebugLogger.debugLog("ChatViewModel", "├─ Session ID: ${response.sessionId}")
+                    DebugLogger.debugLog("ChatViewModel", "├─ Agent State: ${response.currentState}")
+                    DebugLogger.debugLog("ChatViewModel", "├─ Welcome Message Length: ${response.agentResponse?.length ?: 0} chars")
+
 
                     val welcomeText = response.agentResponse.orEmpty()
                     if (welcomeText.isNotBlank()) {
+                        val animStartMs = System.currentTimeMillis()
+                        DebugLogger.debugLog("ChatViewModel", "│")
+                        DebugLogger.debugLog("ChatViewModel", "├─ [ANIMATION] Starting typing animation...")
+
                         _fullTextForTTS.value = welcomeText
                         startTypingAnimation(welcomeText, context)
+
+                        val animDurationMs = System.currentTimeMillis() - animStartMs
+                        DebugLogger.debugLog("ChatViewModel", "├─ [ANIMATION] Initiated in ${animDurationMs}ms")
+
                     }
+
+                    val totalMs = System.currentTimeMillis() - sessionStartOverallMs
+                    DebugLogger.debugLog("ChatViewModel", "│")
+                    DebugLogger.debugLog("ChatViewModel", "└─ NEW SESSION INITIALIZATION COMPLETE")
+                    DebugLogger.debugLog("ChatViewModel", "    BREAKDOWN:")
+                    DebugLogger.debugLog("ChatViewModel", "    • Network Call:           ${networkDurationMs}ms")
+                    DebugLogger.debugLog("ChatViewModel", "    • Response Processing:    ${processingDurationMs}ms")
+                    DebugLogger.debugLog("ChatViewModel", "    ─────────────────────────────────")
+                    DebugLogger.debugLog("ChatViewModel", "    • TOTAL:                  ${totalMs}ms")
+                    DebugLogger.debugLog("ChatViewModel", "═══════════════════════════════════════════════════════════")
+
                 } else {
+                    DebugLogger.debugLog("ChatViewModel", "└─ NEW SESSION INITIALIZATION FAILED")
+                    DebugLogger.debugLog("ChatViewModel", "═══════════════════════════════════════════════════════════")
                     handleRequestFailure("Session start failed: ${response?.message ?: "Unknown error"}")
                 }
             } else {
                 val err = result.exceptionOrNull()?.message ?: "Unknown error"
+                DebugLogger.debugLog("ChatViewModel", "└─ NEW SESSION INITIALIZATION FAILED")
+                DebugLogger.debugLog("ChatViewModel", "═══════════════════════════════════════════════════════════")
                 handleRequestFailure("Failed to start session: $err")
+
             }
         } catch (e: Exception) {
+            val errorDurationMs = System.currentTimeMillis() - sessionStartOverallMs  // NOW WORKS! - FIX #2
+            DebugLogger.errorLog("ChatViewModel", "└─ NEW SESSION INITIALIZATION EXCEPTION after ${errorDurationMs}ms")
+            DebugLogger.errorLog("ChatViewModel", "    Error: ${e.message}")
+            DebugLogger.errorLog("ChatViewModel", "═══════════════════════════════════════════════════════════")
             handleRequestFailure("Session start exception: ${e.message}")
         } finally {
             _isLoading.value = false
@@ -480,7 +610,6 @@ class ChatViewModel(
             sendMessageAfterSessionReady(msg, context)
         }
     }
-
     // Send a user message to the AI
     fun sendMessage(userMessage: String, context: Context) {
         if (userMessage.isBlank()) return
@@ -508,62 +637,185 @@ class ChatViewModel(
         _isLoading.value = true
         cancelAnimations()
 
-
         slowNetworkJob = viewModelScope.launch {
             delay(5000L)
             DebugLogger.debugLog("ChatViewModel", "Slow network detected")
         }
 
         viewModelScope.launch {
+            // DECLARE BEFORE TRY BLOCK - FIX #1
+            val overallStartMs = System.currentTimeMillis()
+
             try {
-                val startNs = System.nanoTime()
-                val result = withTimeout(120_000L) {
-                    agenticAIClient.continueSession(userMessage)
+                DebugLogger.debugLog("ChatViewModel", "═══════════════════════════════════════════════════════════")
+                DebugLogger.debugLog("ChatViewModel", "┌─ AI AGENT CALL INITIATED")
+                DebugLogger.debugLog("ChatViewModel", "├─ Timestamp: $overallStartMs")
+                DebugLogger.debugLog("ChatViewModel", "├─ User Message Length: ${userMessage.length} characters")
+                DebugLogger.debugLog("ChatViewModel", "├─ Current Model: ${_selectedModel.value}")
+                DebugLogger.debugLog("ChatViewModel", "├─ Clicked Autosuggestion: $clickedAutosuggestion")
+                DebugLogger.debugLog("ChatViewModel", "├─ Current Language: ${_currentLanguage.value}")
+                DebugLogger.debugLog("ChatViewModel", "└─ Will call agenticAIClient.continueSession()")
+
+                val networkStartMs = System.currentTimeMillis()
+
+                DebugLogger.debugLog("ChatViewModel", "│")
+                DebugLogger.debugLog("ChatViewModel", "├─ [NETWORK CALL] Starting at $networkStartMs")
+                DebugLogger.debugLog("ChatViewModel", "├─ Sending request to AgenticAI service...")
+
+                // DON'T PASS GROQ MODEL TO AGENTIC AI
+                val modelForSession = if (isGroqModel(_selectedModel.value)) {
+                    DebugLogger.debugLog("ChatViewModel", "├─ Groq model detected - passing null to AgenticAI")
+                    null
+                } else {
+                    _selectedModel.value
                 }
-                val elapsedMs = (System.nanoTime() - startNs) / 1_000_000L
+                val result = withTimeout(120_000L) {
+                    agenticAIClient.continueSession(
+                        userMessage =userMessage,
+                        model =modelForSession,
+                        clickedAutosuggestion = clickedAutosuggestion ,//add check if used clicked autosuggestion
+                        studentLevel =_studentLevel.value,
+                        )
+                }
+
+                val networkEndMs = System.currentTimeMillis()
+                val networkDurationMs = networkEndMs - networkStartMs
+
+                DebugLogger.debugLog("ChatViewModel", "├─ [NETWORK CALL] Completed in ${networkDurationMs}ms")
 
                 slowNetworkJob?.cancel()
+
+                val validationStartMs = System.currentTimeMillis()
 
                 when {
                     result.isFailure -> {
                         val err = result.exceptionOrNull()?.message ?: "Request failed"
                         DebugLogger.errorLog("ChatViewModel", "continueSession FAILED: $err")
+
+                        val validationDurationMs = System.currentTimeMillis() - validationStartMs
+                        DebugLogger.debugLog("ChatViewModel", "├─ [RESPONSE VALIDATION] Failed in ${validationDurationMs}ms")
+                        DebugLogger.debugLog("ChatViewModel", "├─ Error Type: ${result.exceptionOrNull()?.javaClass?.simpleName}")
+                        DebugLogger.debugLog("ChatViewModel", "└─ AI AGENT CALL FAILED")
+                        DebugLogger.debugLog("ChatViewModel", "═══════════════════════════════════════════════════════════")
+
                         handleRequestFailure(err)
+                        return@launch
                     }
                     else -> {
                         val resp = result.getOrNull()!!
 
                         if (!resp.success) {
+                            val validationDurationMs = System.currentTimeMillis() - validationStartMs
+                            DebugLogger.debugLog("ChatViewModel", "├─ [RESPONSE VALIDATION] Server error in ${validationDurationMs}ms")
+                            DebugLogger.debugLog("ChatViewModel", "├─ Server Message: ${resp.message}")
+                            DebugLogger.debugLog("ChatViewModel", "└─ AI AGENT CALL FAILED")
+                            DebugLogger.debugLog("ChatViewModel", "═══════════════════════════════════════════════════════════")
+
                             handleRequestFailure(resp.message ?: "Server returned error")
                             return@launch
                         }
 
-                        DebugLogger.debugLog("ChatViewModel", "continueSession SUCCESS (${elapsedMs}ms)")
+                        val validationDurationMs = System.currentTimeMillis() - validationStartMs
+                        DebugLogger.debugLog("ChatViewModel", "├─ [RESPONSE VALIDATION] Passed in ${validationDurationMs}ms")
+                        DebugLogger.debugLog("ChatViewModel", "├─ Response size: ${resp.agentResponse?.length ?: 0} characters")
+                        DebugLogger.debugLog("ChatViewModel", "├─ Agent State: ${resp.currentState}")
+                        DebugLogger.debugLog("ChatViewModel", "├─ Autosuggestions: ${resp.autosuggestions.size}")
+
+                        val stateStartMs = System.currentTimeMillis()
+                        DebugLogger.debugLog("ChatViewModel", "│")
+                        DebugLogger.debugLog("ChatViewModel", "├─ [STATE MANAGEMENT] Starting")
 
                         _agentState.value = resp.currentState.orEmpty()
-                        resp.metadata?.let { _agentMetadata.value = it }
+                        resp.metadata.let { _agentMetadata.value = it }
+
+                        updateAutosuggestions(resp.autosuggestions)
+                        DebugLogger.debugLog("ChatViewModel", "├─ Autosuggestions from continueSession: ${resp.autosuggestions.size}")
+                        resp.autosuggestions.forEachIndexed { idx, suggestion ->
+                            DebugLogger.debugLog("ChatViewModel", "  [$idx] $suggestion")
+                        }
+
+                        val stateDurationMs = System.currentTimeMillis() - stateStartMs
+                        DebugLogger.debugLog("ChatViewModel", "├─ [STATE MANAGEMENT] Completed in ${stateDurationMs}ms")
+
+                        // ─────────────────────────────────────────────────────────────
+                        // TEXT PROCESSING & ANIMATION PHASE
+                        // ─────────────────────────────────────────────────────────────
+                        val textProcessStartMs = System.currentTimeMillis()
+                        DebugLogger.debugLog("ChatViewModel", "│")
+                        DebugLogger.debugLog("ChatViewModel", "├─ [TEXT PROCESSING] Starting typing animation...")
+
 
                         val text = resp.agentResponse.orEmpty()
                         if (text.isBlank()) {
+                            val textDurationMs = System.currentTimeMillis() - textProcessStartMs
+                            DebugLogger.errorLog("ChatViewModel", "├─ [TEXT PROCESSING] Empty response in ${textDurationMs}ms")
+                            DebugLogger.debugLog("ChatViewModel", "└─ AI AGENT CALL FAILED")
+                            DebugLogger.debugLog("ChatViewModel", "═══════════════════════════════════════════════════════════")
+
                             handleRequestFailure("Empty response from server")
                             return@launch
                         }
+
+                        // startTypingAnimation will handle animation and trigger concept map
                         startTypingAnimation(text, context)
+
+                        val textDurationMs = System.currentTimeMillis() - textProcessStartMs
+                        DebugLogger.debugLog("ChatViewModel", "├─ [TEXT PROCESSING] Animation initiated in ${textDurationMs}ms")
+
+                        // ─────────────────────────────────────────────────────────────
+                        // OVERALL SUMMARY & METRICS
+                        // ─────────────────────────────────────────────────────────────
+                        val overallEndMs = System.currentTimeMillis()
+                        val overallDurationMs = overallEndMs - overallStartMs
+
+                        DebugLogger.debugLog("ChatViewModel", "│")
+                        DebugLogger.debugLog("ChatViewModel", "└─ AI AGENT CALL COMPLETE")
+                        DebugLogger.debugLog("ChatViewModel", "    TIMING BREAKDOWN:")
+                        DebugLogger.debugLog("ChatViewModel", "    • Network Call:           ${networkDurationMs}ms")
+                        DebugLogger.debugLog("ChatViewModel", "    • Response Validation:    ${validationDurationMs}ms")
+                        DebugLogger.debugLog("ChatViewModel", "    • State Management:       ${stateDurationMs}ms")
+                        DebugLogger.debugLog("ChatViewModel", "    • Text Processing:        ${textDurationMs}ms")
+                        DebugLogger.debugLog("ChatViewModel", "    ─────────────────────────────────")
+                        DebugLogger.debugLog("ChatViewModel", "    • TOTAL:                  ${overallDurationMs}ms")
+                        DebugLogger.debugLog("ChatViewModel", "═══════════════════════════════════════════════════════════")
+
+                        // Store metrics
+                        val metrics = AICallMetrics(
+                            totalDuration = overallDurationMs,
+                            networkCallDuration = networkDurationMs,
+                            parsingDuration = validationDurationMs,
+                            translationDuration = stateDurationMs,
+                            animationStartDuration = textDurationMs
+                        )
+                        _aiCallMetrics.value = metrics
                     }
                 }
             } catch (e: Exception) {
                 slowNetworkJob?.cancel()
+                val errorTime = System.currentTimeMillis()
+                val errorDurationMs = errorTime - overallStartMs  // NOW WORKS! - FIX #1
+
+                val errorType = when (e) {
+                    is kotlinx.coroutines.TimeoutCancellationException -> "TimeoutCancellationException"
+                    else -> e.javaClass.simpleName
+                }
                 val errorMsg = when (e) {
                     is kotlinx.coroutines.TimeoutCancellationException -> "Request timed out"
                     else -> e.message ?: "Unknown error"
                 }
-                DebugLogger.errorLog("ChatViewModel", "continueSession exception: $errorMsg")
+
+                DebugLogger.errorLog("ChatViewModel", "└─ AI AGENT CALL FAILED after ${errorDurationMs}ms")
+                DebugLogger.errorLog("ChatViewModel", "    Error Type: $errorType")
+                DebugLogger.errorLog("ChatViewModel", "    Error Message: $errorMsg")
+                DebugLogger.errorLog("ChatViewModel", "═══════════════════════════════════════════════════════════")
+
                 handleRequestFailure(errorMsg)
             } finally {
                 _isLoading.value = false
             }
         }
     }
+
     /**
      * Helper function to check if concept map should be generated
      * Returns true only if agent state is CI or GE
@@ -623,10 +875,10 @@ class ChatViewModel(
     /**
      * Start typing animation for AI response
      * - Translates text if needed
+     * - Updates original AI response
      * - Updates translated output and TTS text
      * - Animates typing word by word
      * - Finally appends full message to chat
-     * @param fullText The full AI response text
      */
     private fun startTypingAnimation(fullText: String, context: Context) {
         // Store the original API response
@@ -741,26 +993,14 @@ class ChatViewModel(
 
                 val stateSnapshot = _agentState.value
                 if (!shouldGenerateConceptMap(stateSnapshot)) {
-                    DebugLogger.debugLog(
-                        "ChatViewModel",
-                        "├─ STATE CHECK PASSED in ${stateCheckDuration}ms"
-                    )
-                    DebugLogger.debugLog(
-                        "ChatViewModel",
-                        "├─ Concept map skipped, state=$stateSnapshot"
-                    )
-                    DebugLogger.debugLog(
-                        "ChatViewModel",
-                        "└─ CONCEPT MAP GENERATION ABANDONED"
-                    )
+                    DebugLogger.debugLog("ChatViewModel", "├─ STATE CHECK PASSED in ${stateCheckDuration}ms")
+                    DebugLogger.debugLog("ChatViewModel", "├─ Concept map skipped, state=$stateSnapshot")
+                    DebugLogger.debugLog("ChatViewModel", "└─ CONCEPT MAP GENERATION ABANDONED")
                     resetConceptMap()
                     return@launch
                 }
 
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "├─ STATE CHECK PASSED in ${stateCheckDuration}ms - State: $stateSnapshot"
-                )
+                DebugLogger.debugLog("ChatViewModel", "├─ STATE CHECK PASSED in ${stateCheckDuration}ms - State: $stateSnapshot")
 
                 // ─────────────────────────────────────────────────────────────
                 // MODEL SELECTION PHASE
@@ -770,10 +1010,7 @@ class ChatViewModel(
                 val modelCheckTime = System.currentTimeMillis()
                 val modelCheckDuration = modelCheckTime - stateCheckTime
 
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "├─ MODEL SELECTION in ${modelCheckDuration}ms"
-                )
+                DebugLogger.debugLog("ChatViewModel", "├─ MODEL SELECTION in ${modelCheckDuration}ms")
                 DebugLogger.debugLog(
                     "ChatViewModel",
                     "├─ Selected Model: $currentModel"
@@ -795,8 +1032,7 @@ class ChatViewModel(
                     "ChatViewModel",
                     "│"
                 )
-                DebugLogger.debugLog(
-                    "ChatViewModel",
+                DebugLogger.debugLog("ChatViewModel",
                     "├─ [LLM API CALL] Starting at $llmCallStartTime"
                 )
 
@@ -1215,6 +1451,8 @@ class ChatViewModel(
                 _isSessionStarted.value = false
                 agenticAIClient.setCurrentThreadAndSession(null, null)
                 _messages.value = emptyList()
+                _autosuggestions.value = emptyList()
+                _agentState.value = ""
                 resetConceptMap()
 
                 selectConcept(displayedConcept, context)

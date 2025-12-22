@@ -131,14 +131,18 @@ class AgenticAIClient(
         studentId: String,
         personaName: String? = null,
         sessionLabel: String? = null,
-        isKannada: Boolean = false
+        isKannada: Boolean = false,
+        model:String?="gemini-2.5-flash",
+        studentLevel:String="medium"
     ): Result<StartSessionResponse> = withContext(Dispatchers.IO) {
         val req = StartSessionRequest(
             conceptTitle = conceptTitle,
             studentId = studentId,
             personaName = personaName,
             sessionLabel = sessionLabel,
-            isKannada = isKannada
+            isKannada = isKannada,
+            model=model,
+            studentLevel=studentLevel
         )
 
         val res = callWithRetry { service.startSession(req) }
@@ -156,16 +160,27 @@ class AgenticAIClient(
         res
     }
 
-    suspend fun continueSession(userMessage: String): Result<ContinueSessionResponse> =
+    suspend fun continueSession(
+        userMessage: String,
+        model: String?,
+        clickedAutosuggestion: Boolean,
+        studentLevel: String
+    ): Result<ContinueSessionResponse> =
         withContext(Dispatchers.IO) {
             val thread = _currentThreadId.value
                 ?: return@withContext Result.failure(IOException("No active thread"))
 
-            val req = ContinueSessionRequest(threadId = thread, userMessage = userMessage)
+            val req = ContinueSessionRequest(
+                threadId = thread,
+                userMessage = userMessage,
+                model = model,
+                clickedAutosuggestion = clickedAutosuggestion,
+                studentLevel = studentLevel
+            )
 
             val res = callWithRetry { service.continueSession(req) }
 
-            // Update threadId if it changed (edge case)
+            // Update threadId if it changed
             if (res.isSuccess) {
                 val body = res.getOrNull()
                 body?.threadId?.let {
@@ -173,6 +188,10 @@ class AgenticAIClient(
                         DebugLogger.debugLog(
                             "AgenticAIClient",
                             "ThreadId updated: ${_currentThreadId.value} -> $it"
+                        )
+                        DebugLogger.debugLog(
+                            "AgenticAIClient",
+                            "Call with model: $model , clickedAutosuggestion: $clickedAutosuggestion, studentLevel: $studentLevel"
                         )
                         _currentThreadId.value = it
                     }

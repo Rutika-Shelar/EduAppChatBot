@@ -95,6 +95,9 @@ fun ChatBotScreen(
     val boyDisplayName = stringResource(R.string.boy)
     val girlDisplayName = stringResource(R.string.girl)
     val disableAvatar =stringResource(R.string.disable)
+    val levelLowText = stringResource(R.string.level_low)
+    val levelMediumText = stringResource(R.string.level_medium)
+    val levelAdvancedText = stringResource(R.string.level_advanced)
 
     // Language selection state
     var selectedLanguage by remember { mutableStateOf(currentLanguage) }
@@ -126,6 +129,9 @@ fun ChatBotScreen(
     // Concept selection pending state
     var pendingConceptSelection by remember { mutableStateOf<String?>(null) }
 
+    // Autosuggestions state
+    val autosuggestions by chatViewModel.autosuggestions.collectAsState()
+
     // Keyboard controller
     val keyboardController = LocalSoftwareKeyboardController.current
     // Audio playback tracking
@@ -134,6 +140,9 @@ fun ChatBotScreen(
     // Collect available concepts and selected concept from ViewModel
     val availableConcepts by chatViewModel.availableConcepts.collectAsState()
     val selectedConcept by chatViewModel.selectedConcept.collectAsState()
+    //selected student level state
+    var selectedStudentLevel by remember { mutableStateOf("medium") }
+    val studentLevel by chatViewModel.studentLevel.collectAsState()
 
     // Collect available models
     val availableModels by chatViewModel.availableModels.collectAsState()
@@ -165,6 +174,9 @@ fun ChatBotScreen(
         if (availableModels.isNotEmpty() && selectedModel.isEmpty()) {
             selectedModel = availableModels.first()
         }
+    }
+    LaunchedEffect(studentLevel) {
+        selectedStudentLevel = studentLevel
     }
     LaunchedEffect(ttsState.isSpeaking) {
         if (ttsState.isSpeaking) {
@@ -458,6 +470,40 @@ fun ChatBotScreen(
 
                             Spacer(Modifier.height(12.dp))
                             Text(
+                                stringResource(R.string.select_student_level),
+                                color = TextPrimary,
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Spacer(Modifier.height(8.dp))
+
+                            DropDownMenuModel(
+                                label = stringResource(R.string.student_level),
+                                options = listOf(
+                                    stringResource(R.string.level_low),
+                                    stringResource(R.string.level_medium),
+                                    stringResource(R.string.level_advanced)
+                                ),
+                                selectedValue = when (selectedStudentLevel) {
+                                    "low" -> stringResource(R.string.level_low)
+                                    "medium" -> stringResource(R.string.level_medium)
+                                    "advanced" -> stringResource(R.string.level_advanced)
+                                    else -> stringResource(R.string.level_medium)
+                                },
+                                onValueSelected = { displayName ->
+                                    val levelCode = when (displayName) {
+                                        levelLowText -> "low"
+                                        levelMediumText -> "medium"
+                                        levelAdvancedText -> "advanced"
+                                        else -> "medium"
+                                    }
+                                    selectedStudentLevel = levelCode
+                                    chatViewModel.setStudentLevel(levelCode)
+                                    DebugLogger.debugLog("ChatBotScreen", "Student level changed to: $levelCode")
+                                }
+                            )
+
+                            Spacer(Modifier.height(12.dp))
+                            Text(
                                 stringResource(R.string.select_speed),
                                 color = TextPrimary,
                                 style = MaterialTheme.typography.titleSmall
@@ -714,6 +760,16 @@ fun ChatBotScreen(
                                             modifier = Modifier.padding(start = 4.dp, top = 6.dp)
                                         )
                                     }
+                                    // autosuggestions
+                                    AutosuggestionChips(
+                                        suggestions = autosuggestions,
+                                        onSuggestionTapped = { suggestion ->
+                                            chatViewModel.tapAutosuggestion(suggestion, context)
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = 8.dp)
+                                    )
                                 }
                             }
                         }
