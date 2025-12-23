@@ -22,6 +22,7 @@ import com.example.eduappchatbot.data.repository.SessionRepository
 import com.example.eduappchatbot.data.repository.UserSessionRepository
 import com.example.eduappchatbot.utils.TranslationHelper
 import androidx.core.content.edit
+import kotlinx.coroutines.isActive
 
 
 data class AICallMetrics(
@@ -399,8 +400,8 @@ class ChatViewModel(
             //reset autosuggestions when selecting new concept
             _autosuggestions.value = emptyList()
             _agentState.value = ""
-            cancelAnimations()
             resetConceptMap()
+            cancelAnimations()
 
             try {
                 val stored = loadThreadMapping(context, originalConcept)
@@ -985,9 +986,7 @@ class ChatViewModel(
 
         conceptMapJob = viewModelScope.launch {
             try {
-                // ─────────────────────────────────────────────────────────────
                 // STATE CHECK PHASE
-                // ─────────────────────────────────────────────────────────────
                 val stateCheckTime = System.currentTimeMillis()
                 val stateCheckDuration = stateCheckTime - startTimeMs
 
@@ -1002,39 +1001,21 @@ class ChatViewModel(
 
                 DebugLogger.debugLog("ChatViewModel", "├─ STATE CHECK PASSED in ${stateCheckDuration}ms - State: $stateSnapshot")
 
-                // ─────────────────────────────────────────────────────────────
                 // MODEL SELECTION PHASE
-                // ─────────────────────────────────────────────────────────────
                 val currentModel = _selectedModel.value
                 val isGroq = isGroqModel(currentModel)
                 val modelCheckTime = System.currentTimeMillis()
                 val modelCheckDuration = modelCheckTime - stateCheckTime
 
                 DebugLogger.debugLog("ChatViewModel", "├─ MODEL SELECTION in ${modelCheckDuration}ms")
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "├─ Selected Model: $currentModel"
-                )
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "├─ Is Groq: $isGroq"
-                )
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "├─ Calling ${if (isGroq) "LLMClient.queryLLM()" else "GeminiLLMClient.queryLLM()"}"
-                )
+                DebugLogger.debugLog("ChatViewModel", "├─ Selected Model: $currentModel")
+                DebugLogger.debugLog("ChatViewModel", "├─ Is Groq: $isGroq")
+                DebugLogger.debugLog("ChatViewModel", "├─ Calling ${if (isGroq) "LLMClient.queryLLM()" else "GeminiLLMClient.queryLLM()"}")
 
-                // ─────────────────────────────────────────────────────────────
                 // LLM API CALL PHASE
-                // ─────────────────────────────────────────────────────────────
                 val llmCallStartTime = System.currentTimeMillis()
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "│"
-                )
-                DebugLogger.debugLog("ChatViewModel",
-                    "├─ [LLM API CALL] Starting at $llmCallStartTime"
-                )
+                DebugLogger.debugLog("ChatViewModel", "│")
+                DebugLogger.debugLog("ChatViewModel", "├─ [LLM API CALL] Starting at $llmCallStartTime")
 
                 val response = if (isGroq) {
                     llmClient.queryLLM(aiResponse, _currentLanguage.value)
@@ -1045,27 +1026,13 @@ class ChatViewModel(
                 val llmCallEndTime = System.currentTimeMillis()
                 val llmCallDuration = llmCallEndTime - llmCallStartTime
 
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "├─ [LLM API CALL] Completed in ${llmCallDuration}ms"
-                )
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "├─ Response body size: ${response.length} characters"
-                )
+                DebugLogger.debugLog("ChatViewModel", "├─ [LLM API CALL] Completed in ${llmCallDuration}ms")
+                DebugLogger.debugLog("ChatViewModel", "├─ Response body size: ${response.length} characters")
 
-                // ─────────────────────────────────────────────────────────────
                 // JSON EXTRACTION PHASE
-                // ─────────────────────────────────────────────────────────────
                 val jsonExtractStartTime = System.currentTimeMillis()
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "│"
-                )
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "├─ [JSON EXTRACTION] Starting at $jsonExtractStartTime"
-                )
+                DebugLogger.debugLog("ChatViewModel", "│")
+                DebugLogger.debugLog("ChatViewModel", "├─ [JSON EXTRACTION] Starting at $jsonExtractStartTime")
 
                 val json = if (isGroq) {
                     llmClient.extractConceptMapJSON(response)
@@ -1085,9 +1052,12 @@ class ChatViewModel(
                     "├─ Extracted JSON size: ${json.length} characters"
                 )
 
-                // ─────────────────────────────────────────────────────────────
+                if (!isActive) {
+                    DebugLogger.debugLog("ChatViewModel", "Concept map generation was cancelled")
+                    resetConceptMap()
+                    return@launch
+                }
                 // PROGRESSIVE RENDERING PHASE
-                // ─────────────────────────────────────────────────────────────
                 val progressiveRenderStartTime = System.currentTimeMillis()
                 DebugLogger.debugLog(
                     "ChatViewModel",
@@ -1100,69 +1070,28 @@ class ChatViewModel(
 
                 startProgressiveConceptMap(json)
 
-                // ─────────────────────────────────────────────────────────────
                 // OVERALL SUMMARY
-                // ─────────────────────────────────────────────────────────────
                 val overallEndTime = System.currentTimeMillis()
                 val overallDuration = overallEndTime - startTimeMs
 
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "│"
-                )
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "└─ CONCEPT MAP GENERATION COMPLETE"
-                )
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "    BREAKDOWN:"
-                )
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "    • State Check:        ${stateCheckDuration}ms"
-                )
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "    • Model Selection:    ${modelCheckDuration}ms"
-                )
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "    • LLM API Call:       ${llmCallDuration}ms "
-                )
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "    • JSON Extraction:    ${jsonExtractDuration}ms"
-                )
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "    ─────────────────────────────────"
-                )
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "    • TOTAL:              ${overallDuration}ms"
-                )
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "═══════════════════════════════════════════════════════════"
-                )
+                DebugLogger.debugLog("ChatViewModel", "│")
+                DebugLogger.debugLog("ChatViewModel", "└─ CONCEPT MAP GENERATION COMPLETE")
+                DebugLogger.debugLog("ChatViewModel", "    BREAKDOWN:")
+                DebugLogger.debugLog("ChatViewModel", "    • State Check:        ${stateCheckDuration}ms")
+                DebugLogger.debugLog("ChatViewModel", "    • Model Selection:    ${modelCheckDuration}ms")
+                DebugLogger.debugLog("ChatViewModel", "    • LLM API Call:       ${llmCallDuration}ms ")
+                DebugLogger.debugLog("ChatViewModel", "    • JSON Extraction:    ${jsonExtractDuration}ms")
+                DebugLogger.debugLog("ChatViewModel", "    ─────────────────────────────────")
+                DebugLogger.debugLog("ChatViewModel", "    • TOTAL:              ${overallDuration}ms")
+                DebugLogger.debugLog("ChatViewModel", "═══════════════════════════════════════════════════════════")
 
             } catch (e: Exception) {
                 val errorTime = System.currentTimeMillis()
                 val errorDuration = errorTime - startTimeMs
 
-                DebugLogger.errorLog(
-                    "ChatViewModel",
-                    "└─  CONCEPT MAP GENERATION FAILED after ${errorDuration}ms"
-                )
-                DebugLogger.errorLog(
-                    "ChatViewModel",
-                    "    Error: ${e.message}"
-                )
-                DebugLogger.errorLog(
-                    "ChatViewModel",
-                    "═══════════════════════════════════════════════════════════"
-                )
+                DebugLogger.errorLog("ChatViewModel", "└─  CONCEPT MAP GENERATION FAILED after ${errorDuration}ms")
+                DebugLogger.errorLog("ChatViewModel", "    Error: ${e.message}")
+                DebugLogger.errorLog("ChatViewModel", "═══════════════════════════════════════════════════════════")
                 resetConceptMap()
             }
         }
@@ -1184,25 +1113,20 @@ class ChatViewModel(
 
         conceptMapJob = viewModelScope.launch {
             try {
+                if (!isActive) {
+                    DebugLogger.debugLog("ChatViewModel", "Concept map rendering was cancelled before start")
+                    return@launch
+                }
                 val jsonObj = JSONObject(conceptMapJson)
                 val nodesArray = jsonObj.optJSONArray("nodes") ?: JSONArray()
                 val edgesArray = jsonObj.optJSONArray("edges") ?: JSONArray()
 
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "├─ Nodes to render: ${nodesArray.length()}"
-                )
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "├─ Edges to render: ${edgesArray.length()}"
-                )
+                DebugLogger.debugLog("ChatViewModel", "├─ Nodes to render: ${nodesArray.length()}")
+                DebugLogger.debugLog("ChatViewModel", "├─ Edges to render: ${edgesArray.length()}")
 
                 if (nodesArray.length() == 0 && edgesArray.length() == 0) {
                     _conceptMapJSON.value = conceptMapJson
-                    DebugLogger.debugLog(
-                        "ChatViewModel",
-                        "├─ Empty concept map - showing as-is"
-                    )
+                    DebugLogger.debugLog("ChatViewModel", "├─ Empty concept map - showing as-is")
                     return@launch
                 }
 
@@ -1213,48 +1137,63 @@ class ChatViewModel(
                 // Add nodes one by one with delay
                 var nodeCount = 0
                 for (i in 0 until nodesArray.length()) {
-                    val nodeAddStartTime = System.currentTimeMillis()
-                    progressiveNodes.put(nodesArray.getJSONObject(i))
-                    updateConceptMapState(jsonObj, progressiveNodes, JSONArray(), audioSegments)
-                    val nodeAddDuration = System.currentTimeMillis() - nodeAddStartTime
-
-                    nodeCount++
-                    if (nodeCount <= 2 || nodeCount == nodesArray.length()) {
-                        DebugLogger.debugLog(
-                            "ChatViewModel",
-                            "├─ Node $nodeCount/${nodesArray.length()} added (${nodeAddDuration}ms)"
-                        )
+                    if (!isActive) {
+                        DebugLogger.debugLog("ChatViewModel", "Concept map rendering cancelled at node $nodeCount")
+                        return@launch
                     }
+                    try {
+                        val nodeAddStartTime = System.currentTimeMillis()
+                        progressiveNodes.put(nodesArray.getJSONObject(i))
+                        updateConceptMapState(jsonObj, progressiveNodes, JSONArray(), audioSegments)
+                        val nodeAddDuration = System.currentTimeMillis() - nodeAddStartTime
 
-                    delay(400L)
+                        nodeCount++
+                        if (nodeCount <= 2 || nodeCount == nodesArray.length()) {
+                            DebugLogger.debugLog(
+                                "ChatViewModel",
+                                "├─ Node $nodeCount/${nodesArray.length()} added (${nodeAddDuration}ms)"
+                            )
+                        }
+
+                        delay(400L)
+                    } catch (e: Exception) {
+                        DebugLogger.errorLog("ChatViewModel", "Error adding node $nodeCount: ${e.message}")
+                        return@launch
+                    }
                 }
 
                 // Add edges one by one
                 var edgeCount = 0
                 for (i in 0 until edgesArray.length()) {
-                    val edgeAddStartTime = System.currentTimeMillis()
-                    progressiveEdges.put(edgesArray.getJSONObject(i))
-                    updateConceptMapState(jsonObj, progressiveNodes, progressiveEdges, audioSegments)
-                    val edgeAddDuration = System.currentTimeMillis() - edgeAddStartTime
-
-                    edgeCount++
-                    if (edgeCount <= 2 || edgeCount == edgesArray.length()) {
-                        DebugLogger.debugLog(
-                            "ChatViewModel",
-                            "├─ Edge $edgeCount/${edgesArray.length()} added (${edgeAddDuration}ms)"
-                        )
+                    if (!isActive) {
+                        DebugLogger.debugLog("ChatViewModel", "Concept map rendering cancelled at edge $edgeCount")
+                        return@launch
                     }
-                    //Delay between edge additions
-                    delay(300L)
+                    try {
+                        val edgeAddStartTime = System.currentTimeMillis()
+                        progressiveEdges.put(edgesArray.getJSONObject(i))
+                        updateConceptMapState(jsonObj, progressiveNodes, progressiveEdges, audioSegments)
+                        val edgeAddDuration = System.currentTimeMillis() - edgeAddStartTime
+
+                        edgeCount++
+                        if (edgeCount <= 2 || edgeCount == edgesArray.length()) {
+                            DebugLogger.debugLog(
+                                "ChatViewModel",
+                                "├─ Edge $edgeCount/${edgesArray.length()} added (${edgeAddDuration}ms)"
+                            )
+                        }
+
+                        delay(300L)
+                    } catch (e: Exception) {
+                        DebugLogger.errorLog("ChatViewModel", "Error adding edge $edgeCount: ${e.message}")
+                        return@launch
+                    }
                 }
 
                 val progressiveRenderEndTime = System.currentTimeMillis()
                 val progressiveRenderDuration = progressiveRenderEndTime - progressiveRenderStartTime
 
-                DebugLogger.debugLog(
-                    "ChatViewModel",
-                    "├─ Progressive Rendering Completed in ${progressiveRenderDuration}ms"
-                )
+                DebugLogger.debugLog("ChatViewModel", "├─ Progressive Rendering Completed in ${progressiveRenderDuration}ms")
 
             } catch (e: Exception) {
                 DebugLogger.errorLog(

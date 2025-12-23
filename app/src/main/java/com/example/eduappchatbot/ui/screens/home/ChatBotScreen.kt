@@ -760,16 +760,7 @@ fun ChatBotScreen(
                                             modifier = Modifier.padding(start = 4.dp, top = 6.dp)
                                         )
                                     }
-                                    // autosuggestions
-                                    AutosuggestionChips(
-                                        suggestions = autosuggestions,
-                                        onSuggestionTapped = { suggestion ->
-                                            chatViewModel.tapAutosuggestion(suggestion, context)
-                                        },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(top = 8.dp)
-                                    )
+
                                 }
                             }
                         }
@@ -852,15 +843,25 @@ fun ChatBotScreen(
                             }
                         }
 
-                        Text(
-                            text = when {
+                        CompactStatusIndicator(
+                            isLoading = isChatLoading,
+                            message = when {
                                 !isNetworkConnected -> stringResource(R.string.no_internet_connection)
                                 isChatLoading -> stringResource(R.string.sending)
                                 else -> stringResource(R.string.tap_to_send)
                             },
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (isNetworkConnected) ColorHint else Color.Red,
-                            modifier = Modifier.padding(start = 20.dp, bottom = 8.dp)
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        // autosuggestions
+                        AutosuggestionChips(
+                            suggestions = autosuggestions,
+                            onSuggestionTapped = { suggestion ->
+                                chatViewModel.tapAutosuggestion(suggestion, context)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
                         )
                     }
                 }
